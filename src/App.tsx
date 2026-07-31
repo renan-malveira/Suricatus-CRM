@@ -21,8 +21,8 @@ export default function App() {
   const [carregando, setCarregando] = useState(true);
   // Chegou por um link de convite ou de recuperação de senha? -> mostrar "Definir senha".
   const [definirSenha, setDefinirSenha] = useState(() => {
-    const h = window.location.hash;
-    return h.includes('type=invite') || h.includes('type=recovery');
+    const s = window.location.hash + window.location.search;
+    return s.includes('type=invite') || s.includes('type=recovery');
   });
 
   useEffect(() => {
