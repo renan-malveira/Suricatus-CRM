@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { Negocio, Atividade, Anexo, Cliente, HistoricoEtapa, TipoAtividade } from '../lib/types';
 import { ETAPAS, ETAPA_MAP, LINHA_MAP, TIPOS_ATIVIDADE, TIPO_ATIVIDADE_MAP } from '../lib/constants';
 import {
-  getNegocio, listAtividades, createAtividade, listAnexos, uploadAnexo,
+  getNegocio, listAtividadesDoNegocio, createAtividade, listAnexos, uploadAnexo,
   urlDownload, deleteAnexo, deleteNegocio, listClientes, listHistorico, concluirAtividade,
   listPlannerProjetos,
 } from '../lib/db';
@@ -35,18 +35,22 @@ export default function NegocioDetalhe() {
     if (!id) return;
     setCarregando(true);
     try {
-      const [n, a, x, h, c] = await Promise.all([
-        getNegocio(id), listAtividades(id), listAnexos(id), listHistorico(id), listClientes(),
-      ]);
+      const n = await getNegocio(id);
       setNeg(n);
+      const [a, x, h, c] = await Promise.all([
+        listAtividadesDoNegocio(id, n?.cliente_id ?? null),
+        listAnexos(id), listHistorico(id), listClientes(),
+      ]);
       setAtividades(a);
       setAnexos(x);
       setHistorico(h);
       setClientes(c);
-      if (n?.planner_project_id) {
+      // Projeto do Planner vem do CLIENTE (vínculo automático cliente <-> projeto).
+      const cli = n?.cliente_id ? c.find((x) => x.id === n.cliente_id) : null;
+      if (cli?.planner_project_id) {
         try {
           const projs = await listPlannerProjetos();
-          setPlannerNome(projs.find((p) => p.id === n.planner_project_id)?.name ?? '(projeto removido)');
+          setPlannerNome(projs.find((p) => p.id === cli.planner_project_id)?.name ?? '(projeto removido)');
         } catch {
           setPlannerNome(null);
         }
@@ -70,13 +74,14 @@ export default function NegocioDetalhe() {
     setEnviando(true);
     try {
       await createAtividade({
-        negocio_id: id, tipo, descricao: nota.trim(), autor: autor.trim() || null,
+        negocio_id: id, cliente_id: neg?.cliente_id ?? null,
+        tipo, descricao: nota.trim(), autor: autor.trim() || null,
         data_agendada: dataAg ? new Date(dataAg).toISOString() : null,
       });
       setNota('');
       setDataAg('');
       setTipo('nota');
-      setAtividades(await listAtividades(id));
+      setAtividades(await listAtividadesDoNegocio(id, neg?.cliente_id ?? null));
     } catch (e) {
       setErro((e as Error).message);
     }

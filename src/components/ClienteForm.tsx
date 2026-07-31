@@ -51,10 +51,12 @@ export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
         onSaved();
         return;
       }
-      await createCliente(f);
-      // Cliente novo criado: cria automaticamente um projeto no Planner (coluna TO-DO).
+      const novo = await createCliente(f);
+      // Cliente novo criado: cria automaticamente um projeto no Planner (coluna TO-DO)
+      // e guarda o vínculo cliente <-> projeto para a sincronização de anotações.
       try {
-        await criarProjetoNoPlanner(f.nome!);
+        const projId = await criarProjetoNoPlanner(f.nome!);
+        await updateCliente(novo.id, { planner_project_id: projId });
         onSaved();
       } catch (e) {
         setClienteCriado(true);

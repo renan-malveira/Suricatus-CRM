@@ -65,11 +65,26 @@ alter table public.atividades add column if not exists data_agendada timestamptz
 alter table public.atividades add column if not exists concluida boolean not null default false;
 
 -- ---------- (7) Integração com o Suricatus Planner ----------
--- Vínculo do negócio a um projeto do planner (data.projects[].id na linha 'main').
+-- Vínculo do negócio a um projeto do planner (legado; hoje o vínculo é por cliente).
 alter table public.negocios add column if not exists planner_project_id text;
 -- De onde veio a atividade: 'crm' (padrão) ou 'planner'.
 alter table public.atividades add column if not exists origem text not null default 'crm';
 create index if not exists idx_negocios_planner on public.negocios(planner_project_id) where planner_project_id is not null;
+
+-- Vínculo cliente <-> projeto do planner (1 pra 1, criado automaticamente).
+alter table public.clientes add column if not exists planner_project_id text;
+create index if not exists idx_clientes_planner on public.clientes(planner_project_id) where planner_project_id is not null;
+
+-- Atividades agora podem ser do CLIENTE (não só de um negócio), para o canal
+-- de anotações CRM <-> Planner funcionar automaticamente por cliente.
+alter table public.atividades add column if not exists cliente_id uuid references public.clientes(id) on delete set null;
+alter table public.atividades alter column negocio_id drop not null;
+create index if not exists idx_atividades_cliente on public.atividades(cliente_id);
+-- Backfill: preenche cliente_id das atividades existentes a partir do negócio.
+update public.atividades a
+  set cliente_id = n.cliente_id
+  from public.negocios n
+  where a.negocio_id = n.id and a.cliente_id is null;
 
 -- Permite o CRM (usuário logado) LER e ESCREVER na tabela projects do planner (linha 'main').
 -- A escrita é necessária para criar projetos no planner a partir de um cliente novo.

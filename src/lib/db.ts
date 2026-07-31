@@ -134,6 +134,22 @@ export async function listAtividades(negocioId: string): Promise<Atividade[]> {
   return data ?? [];
 }
 
+/**
+ * Atividades de um negócio + as atividades no nível do cliente (negocio_id nulo),
+ * para que anotações vindas do Planner (que são do cliente) apareçam no negócio.
+ */
+export async function listAtividadesDoNegocio(negocioId: string, clienteId: string | null): Promise<Atividade[]> {
+  let q = supabase.from('atividades').select('*');
+  if (clienteId) {
+    q = q.or(`negocio_id.eq.${negocioId},and(cliente_id.eq.${clienteId},negocio_id.is.null)`);
+  } else {
+    q = q.eq('negocio_id', negocioId);
+  }
+  const { data, error } = await q.order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data as unknown as Atividade[]) ?? [];
+}
+
 export async function createAtividade(a: Partial<Atividade>): Promise<Atividade> {
   const { data, error } = await supabase.from('atividades').insert(a).select().single();
   if (error) throw error;
@@ -217,11 +233,11 @@ export async function concluirAtividade(id: string, concluida: boolean): Promise
   if (error) throw error;
 }
 
-/** Todas as atividades, com negócio e cliente vinculados (para o registro de contatos). */
+/** Todas as atividades, com cliente e negócio vinculados (para o registro de contatos). */
 export async function listAtividadesGlobais(): Promise<Atividade[]> {
   const { data, error } = await supabase
     .from('atividades')
-    .select('*, negocio:negocios(id, titulo, cliente_id, cliente:clientes(id, nome))')
+    .select('*, cliente:clientes(id, nome), negocio:negocios(id, titulo, cliente_id, cliente:clientes(id, nome))')
     .order('data_agendada', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
   if (error) throw error;

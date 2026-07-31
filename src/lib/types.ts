@@ -28,6 +28,7 @@ export interface Cliente {
   origem: string | null;
   responsavel: string | null;
   status: string | null;
+  planner_project_id: string | null;
   created_at: string;
 }
 
@@ -68,7 +69,8 @@ export interface PlannerProjeto {
 
 export interface Atividade {
   id: string;
-  negocio_id: string;
+  negocio_id: string | null;
+  cliente_id: string | null;
   tipo: TipoAtividade;
   descricao: string;
   autor: string | null;
@@ -76,6 +78,7 @@ export interface Atividade {
   data_agendada: string | null;
   concluida: boolean;
   created_at: string;
+  cliente?: { id: string; nome: string } | null;
   negocio?: {
     id: string;
     titulo: string;

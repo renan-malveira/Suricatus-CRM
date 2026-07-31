@@ -63,7 +63,7 @@ export default function Agenda() {
   const porCliente = useMemo(() => {
     const ultimo = new Map<string, string>();
     for (const a of atividades) {
-      const cid = a.negocio?.cliente?.id ?? a.negocio?.cliente_id;
+      const cid = a.cliente_id ?? a.negocio?.cliente?.id ?? a.negocio?.cliente_id;
       if (!cid) continue;
       const d = efetiva(a);
       const atual = ultimo.get(cid);
@@ -85,6 +85,7 @@ export default function Agenda() {
     try {
       await createAtividade({
         negocio_id: negId,
+        cliente_id: negocios.find((n) => n.id === negId)?.cliente_id ?? null,
         tipo,
         descricao: desc.trim(),
         autor: autor.trim() || null,

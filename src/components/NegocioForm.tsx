@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Cliente, Negocio, Etapa, Linha, PlannerProjeto } from '../lib/types';
+import type { Cliente, Negocio, Etapa, Linha } from '../lib/types';
 import { ETAPAS, LINHAS, SOLUCOES, PROBABILIDADE_PADRAO, MOTIVOS_PERDA } from '../lib/constants';
-import { createNegocio, updateNegocio, registrarHistorico, listPlannerProjetos, listProfiles } from '../lib/db';
+import { createNegocio, updateNegocio, registrarHistorico, listProfiles } from '../lib/db';
 import { nomeProfile } from './ClienteForm';
 
 interface Props {
@@ -17,11 +17,9 @@ export default function NegocioForm({ negocio, clientes, onClose, onSaved }: Pro
   );
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
-  const [plannerProjetos, setPlannerProjetos] = useState<PlannerProjeto[] | null>(null);
   const [responsaveis, setResponsaveis] = useState<string[]>([]);
 
   useEffect(() => {
-    listPlannerProjetos().then(setPlannerProjetos).catch(() => setPlannerProjetos([]));
     listProfiles().then((ps) => setResponsaveis(ps.map(nomeProfile))).catch(() => setResponsaveis([]));
   }, []);
 
@@ -128,18 +126,6 @@ export default function NegocioForm({ negocio, clientes, onClose, onSaved }: Pro
           <div>
             <label>Previsão de fechamento</label>
             <input type="date" value={f.previsao_fechamento ?? ''} onChange={(e) => set('previsao_fechamento', e.target.value || null)} />
-          </div>
-          <div className="full">
-            <label>Projeto vinculado no Planner {plannerProjetos === null && <span style={{ color: 'var(--dim)' }}>· carregando…</span>}</label>
-            <select value={f.planner_project_id ?? ''} onChange={(e) => set('planner_project_id', e.target.value || null)}>
-              <option value="">— sem vínculo —</option>
-              {(plannerProjetos ?? []).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>
-              Ligando aqui, as atividades deste negócio aparecem no projeto do Planner (e vice-versa).
-            </div>
           </div>
           <div className="full">
             <label>Próxima ação</label>
