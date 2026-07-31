@@ -72,6 +72,9 @@ export default function Admin() {
         <div style={{ marginTop: 8 }}>
           Novos usuários são criados no painel do Supabase (Authentication → Users) e entram como <b>editor</b> por padrão.
         </div>
+        <div style={{ marginTop: 6, color: 'var(--cyan)' }}>
+          🔗 Este papel vale para os <b>dois apps</b>: no Planner, <b>admin</b> e <b>editor</b> podem editar; <b>leitor</b> entra como visualização. Trocas aqui valem no próximo login do Planner.
+        </div>
       </div>
     </div>
   );
