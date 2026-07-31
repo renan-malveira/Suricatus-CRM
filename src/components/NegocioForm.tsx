@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Cliente, Negocio, Etapa, Linha, PlannerProjeto } from '../lib/types';
 import { ETAPAS, LINHAS, SOLUCOES, PROBABILIDADE_PADRAO, MOTIVOS_PERDA } from '../lib/constants';
-import { createNegocio, updateNegocio, registrarHistorico, listPlannerProjetos } from '../lib/db';
+import { createNegocio, updateNegocio, registrarHistorico, listPlannerProjetos, listProfiles } from '../lib/db';
+import { nomeProfile } from './ClienteForm';
 
 interface Props {
   negocio?: Negocio | null;
@@ -17,10 +18,16 @@ export default function NegocioForm({ negocio, clientes, onClose, onSaved }: Pro
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [plannerProjetos, setPlannerProjetos] = useState<PlannerProjeto[] | null>(null);
+  const [responsaveis, setResponsaveis] = useState<string[]>([]);
 
   useEffect(() => {
     listPlannerProjetos().then(setPlannerProjetos).catch(() => setPlannerProjetos([]));
+    listProfiles().then((ps) => setResponsaveis(ps.map(nomeProfile))).catch(() => setResponsaveis([]));
   }, []);
+
+  const opcoesResp = f.responsavel && !responsaveis.includes(f.responsavel)
+    ? [f.responsavel, ...responsaveis]
+    : responsaveis;
 
   function set<K extends keyof Negocio>(k: K, v: Negocio[K]) {
     setF((p) => ({ ...p, [k]: v }));
@@ -111,7 +118,12 @@ export default function NegocioForm({ negocio, clientes, onClose, onSaved }: Pro
           </div>
           <div>
             <label>Responsável</label>
-            <input value={f.responsavel ?? ''} onChange={(e) => set('responsavel', e.target.value)} placeholder="Ex.: Luis Junior" />
+            <select value={f.responsavel ?? ''} onChange={(e) => set('responsavel', e.target.value || null)}>
+              <option value="">— escolha —</option>
+              {opcoesResp.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label>Previsão de fechamento</label>

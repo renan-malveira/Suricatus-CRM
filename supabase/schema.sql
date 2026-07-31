@@ -71,12 +71,15 @@ alter table public.negocios add column if not exists planner_project_id text;
 alter table public.atividades add column if not exists origem text not null default 'crm';
 create index if not exists idx_negocios_planner on public.negocios(planner_project_id) where planner_project_id is not null;
 
--- Permite o CRM (usuário logado) LER a lista de projetos do planner (tabela projects, linha 'main').
+-- Permite o CRM (usuário logado) LER e ESCREVER na tabela projects do planner (linha 'main').
+-- A escrita é necessária para criar projetos no planner a partir de um cliente novo.
 do $$
 begin
   if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'projects') then
     execute 'drop policy if exists "projects_sel_crm" on public.projects';
+    execute 'drop policy if exists "projects_write_crm" on public.projects';
     execute 'create policy "projects_sel_crm" on public.projects for select to authenticated using (true)';
+    execute 'create policy "projects_write_crm" on public.projects for all to authenticated using (true) with check (true)';
   end if;
 end $$;
 

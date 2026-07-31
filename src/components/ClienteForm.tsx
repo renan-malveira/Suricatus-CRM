@@ -1,12 +1,17 @@
-import { useState } from 'react';
-import type { Cliente, TipoCliente } from '../lib/types';
+import { useEffect, useState } from 'react';
+import type { Cliente, TipoCliente, Profile } from '../lib/types';
 import { TIPOS_CLIENTE, ORIGENS } from '../lib/constants';
-import { createCliente, updateCliente, criarProjetoNoPlanner } from '../lib/db';
+import { createCliente, updateCliente, criarProjetoNoPlanner, listProfiles } from '../lib/db';
 
 interface Props {
   cliente?: Cliente | null;
   onClose: () => void;
   onSaved: () => void;
+}
+
+/** Nome de exibição de um perfil (nome, ou e-mail como fallback). */
+export function nomeProfile(p: Profile): string {
+  return p.nome || p.email || 'Sem nome';
 }
 
 export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
@@ -15,29 +20,47 @@ export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
   );
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [clienteCriado, setClienteCriado] = useState(false);
+  const [responsaveis, setResponsaveis] = useState<string[]>([]);
+
+  useEffect(() => {
+    listProfiles()
+      .then((ps) => setResponsaveis(ps.map(nomeProfile)))
+      .catch(() => setResponsaveis([]));
+  }, []);
 
   function set<K extends keyof Cliente>(k: K, v: Cliente[K]) {
     setF((p) => ({ ...p, [k]: v }));
   }
 
+  // opções do dropdown de responsável, incluindo o valor atual se for antigo/livre
+  const opcoesResp = f.responsavel && !responsaveis.includes(f.responsavel)
+    ? [f.responsavel, ...responsaveis]
+    : responsaveis;
+
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
+    if (clienteCriado) { onSaved(); return; } // já criado; botão vira "Concluir"
     if (!f.nome) return;
     setSalvando(true);
     setErro('');
     try {
       if (cliente) {
         await updateCliente(cliente.id, f);
-      } else {
-        await createCliente(f);
-        // Cliente novo: cria automaticamente um projeto no Planner (coluna TO-DO).
-        try {
-          await criarProjetoNoPlanner(f.nome!);
-        } catch (e) {
-          console.warn('Cliente criado, mas falhou ao criar o projeto no Planner:', e);
-        }
+        onSaved();
+        return;
       }
-      onSaved();
+      await createCliente(f);
+      // Cliente novo criado: cria automaticamente um projeto no Planner (coluna TO-DO).
+      try {
+        await criarProjetoNoPlanner(f.nome!);
+        onSaved();
+      } catch (e) {
+        setClienteCriado(true);
+        setSalvando(false);
+        setAviso('Cliente criado ✓, mas não consegui criar o projeto no Planner: ' + ((e as Error).message || 'erro desconhecido') + '. Você pode concluir mesmo assim.');
+      }
     } catch (err) {
       setErro((err as Error).message ?? 'Erro ao salvar.');
       setSalvando(false);
@@ -49,6 +72,7 @@ export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={salvar}>
         <h3>{cliente ? 'Editar cliente' : 'Novo cliente'}</h3>
         {erro && <div className="err">{erro}</div>}
+        {aviso && <div className="err" style={{ background: 'rgba(245,166,35,.12)', borderColor: 'rgba(245,166,35,.4)', color: '#ffcf7a' }}>{aviso}</div>}
         <div className="formgrid">
           <div className="full">
             <label>Nome do cliente *</label>
@@ -97,7 +121,12 @@ export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
           </div>
           <div>
             <label>Responsável Suricatus</label>
-            <input value={f.responsavel ?? ''} onChange={(e) => set('responsavel', e.target.value)} placeholder="Ex.: Luis Junior" />
+            <select value={f.responsavel ?? ''} onChange={(e) => set('responsavel', e.target.value || null)}>
+              <option value="">— escolha —</option>
+              {opcoesResp.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label>Status</label>
@@ -106,7 +135,9 @@ export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
         </div>
         <div className="modal-foot">
           <button type="button" className="btn" onClick={onClose}>Cancelar</button>
-          <button className="btn primary" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+          <button className="btn primary" disabled={salvando}>
+            {clienteCriado ? 'Concluir' : salvando ? 'Salvando…' : 'Salvar'}
+          </button>
         </div>
       </form>
     </div>
