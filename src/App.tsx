@@ -7,6 +7,7 @@ import { RoleContext } from './lib/RoleContext';
 import type { Role } from './lib/types';
 import Login from './components/Login';
 import Setup from './components/Setup';
+import DefinirSenha from './components/DefinirSenha';
 import Funil from './pages/Funil';
 import Valores from './pages/Valores';
 import Clientes from './pages/Clientes';
@@ -18,6 +19,11 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<Role>('editor');
   const [carregando, setCarregando] = useState(true);
+  // Chegou por um link de convite ou de recuperação de senha? -> mostrar "Definir senha".
+  const [definirSenha, setDefinirSenha] = useState(() => {
+    const h = window.location.hash;
+    return h.includes('type=invite') || h.includes('type=recovery');
+  });
 
   useEffect(() => {
     if (!supabaseConfigurado) {
@@ -28,7 +34,10 @@ export default function App() {
       setSession(data.session);
       setCarregando(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((ev, s) => {
+      setSession(s);
+      if (ev === 'PASSWORD_RECOVERY') setDefinirSenha(true);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -40,6 +49,7 @@ export default function App() {
   }, [session]);
 
   if (!supabaseConfigurado) return <Setup />;
+  if (definirSenha) return <DefinirSenha onDone={() => setDefinirSenha(false)} />;
   if (carregando) return <div className="center-msg">Carregando…</div>;
   if (!session) return <Login />;
 
