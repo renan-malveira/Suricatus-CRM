@@ -278,3 +278,36 @@ export async function listPlannerProjetos(): Promise<PlannerProjeto[]> {
     .filter((p) => p && p.id)
     .map((p) => ({ id: p.id, name: p.name ?? '(sem nome)' }));
 }
+
+/** Mesmo formato de id que o planner usa (uid()). */
+function gerarUidPlanner(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/**
+ * Cria um projeto novo no Planner (coluna TO-DO) a partir de um cliente do CRM.
+ * Lê o doc atual, adiciona o projeto e grava de volta (mesmo padrão do saveData do planner).
+ * Retorna o id do projeto criado.
+ */
+export async function criarProjetoNoPlanner(nome: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('data')
+    .eq('id', PLANNER_ROW_ID)
+    .maybeSingle();
+  if (error) throw error;
+
+  const doc = (data?.data ?? {}) as { projects?: unknown[]; [k: string]: unknown };
+  const projetos = Array.isArray(doc.projects) ? doc.projects : [];
+  const id = gerarUidPlanner();
+  projetos.push({
+    id, name: nome, status: 'TODO', team: [], milestones: [], log: [], tasks: [], origem: 'crm',
+  });
+  doc.projects = projetos;
+
+  const { error: upErr } = await supabase
+    .from('projects')
+    .upsert({ id: PLANNER_ROW_ID, data: doc, updated_at: new Date().toISOString() });
+  if (upErr) throw upErr;
+  return id;
+}

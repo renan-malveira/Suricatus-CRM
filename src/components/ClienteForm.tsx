@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Cliente, TipoCliente } from '../lib/types';
 import { TIPOS_CLIENTE, ORIGENS } from '../lib/constants';
-import { createCliente, updateCliente } from '../lib/db';
+import { createCliente, updateCliente, criarProjetoNoPlanner } from '../lib/db';
 
 interface Props {
   cliente?: Cliente | null;
@@ -26,8 +26,17 @@ export default function ClienteForm({ cliente, onClose, onSaved }: Props) {
     setSalvando(true);
     setErro('');
     try {
-      if (cliente) await updateCliente(cliente.id, f);
-      else await createCliente(f);
+      if (cliente) {
+        await updateCliente(cliente.id, f);
+      } else {
+        await createCliente(f);
+        // Cliente novo: cria automaticamente um projeto no Planner (coluna TO-DO).
+        try {
+          await criarProjetoNoPlanner(f.nome!);
+        } catch (e) {
+          console.warn('Cliente criado, mas falhou ao criar o projeto no Planner:', e);
+        }
+      }
       onSaved();
     } catch (err) {
       setErro((err as Error).message ?? 'Erro ao salvar.');
