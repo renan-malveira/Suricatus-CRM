@@ -13,6 +13,7 @@ import Valores from './pages/Valores';
 import Clientes from './pages/Clientes';
 import NegocioDetalhe from './pages/NegocioDetalhe';
 import Agenda from './pages/Agenda';
+import Prospeccao from './pages/Prospeccao';
 import Admin from './pages/Admin';
 
 export default function App() {
@@ -90,6 +91,10 @@ function Shell({ email, role }: { email: string; role: Role }) {
         <NavLink to="/agenda" className={({ isActive }) => `nav ${isActive ? 'on' : ''}`} onClick={fechar}>
           <span className="ic">◷</span> Agenda
         </NavLink>
+        <div className="nav-h">Prospecção</div>
+        <NavLink to="/prospeccao" className={({ isActive }) => `nav ${isActive ? 'on' : ''}`} onClick={fechar}>
+          <span className="ic">◎</span> Radar de eventos
+        </NavLink>
         {role === 'admin' && (
           <>
             <div className="nav-h">Gestão</div>
@@ -120,6 +125,7 @@ function Shell({ email, role }: { email: string; role: Role }) {
           <Route path="/valores" element={<Valores />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/agenda" element={<Agenda />} />
+          <Route path="/prospeccao" element={<Prospeccao />} />
           <Route path="/negocio/:id" element={<NegocioDetalhe />} />
           <Route path="/admin" element={role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,7 @@
 import { supabase, BUCKET_ANEXOS } from './supabase';
 import type {
   Cliente, Negocio, Atividade, Anexo, Contato, HistoricoEtapa, Profile, Role, Etapa, PlannerProjeto,
+  ProsEvento, ProsMarca, ProsContato, ProsImportacao,
 } from './types';
 import { PROBABILIDADE_PADRAO } from './constants';
 
@@ -275,6 +276,196 @@ export async function listProfiles(): Promise<Profile[]> {
 export async function updateRole(id: string, role: Role): Promise<void> {
   const { error } = await supabase.from('profiles').update({ role }).eq('id', id);
   if (error) throw error;
+}
+
+/* ---------- Radar de prospecção ---------- */
+
+/**
+ * O Supabase corta em 1000 linhas por resposta por padrão. A base tem ~3.800
+ * marcas, então sem paginar a aba Marcas viria silenciosamente truncada.
+ */
+const PAGINA = 1000;
+
+async function lerTudo<T>(tabela: string, ordenar: string, asc = true): Promise<T[]> {
+  const out: T[] = [];
+  for (let de = 0; ; de += PAGINA) {
+    const { data, error } = await supabase
+      .from(tabela)
+      .select('*')
+      .order(ordenar, { ascending: asc, nullsFirst: false })
+      .range(de, de + PAGINA - 1);
+    if (error) throw error;
+    const lote = (data ?? []) as T[];
+    out.push(...lote);
+    if (lote.length < PAGINA) return out;
+  }
+}
+
+export function listProsEventos(): Promise<ProsEvento[]> {
+  return lerTudo<ProsEvento>('pros_eventos', 'data_inicio');
+}
+
+export function listProsMarcas(): Promise<ProsMarca[]> {
+  return lerTudo<ProsMarca>('pros_marcas', 'n_eventos', false);
+}
+
+export function listProsContatos(): Promise<ProsContato[]> {
+  return lerTudo<ProsContato>('pros_contatos', 'prioridade');
+}
+
+export async function updateProsEvento(id: string, patch: Partial<ProsEvento>): Promise<void> {
+  const { error } = await supabase.from('pros_eventos').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateProsContato(id: string, patch: Partial<ProsContato>): Promise<void> {
+  const { error } = await supabase.from('pros_contatos').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+export async function ultimaImportacao(): Promise<ProsImportacao | null> {
+  const { data, error } = await supabase
+    .from('pros_importacoes')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Manda as linhas da planilha pro banco em lotes, via as funções pros_upsert_*.
+ * São elas que garantem que as colunas comerciais não sejam sobrescritas —
+ * por isso NÃO usar supabase.from(...).upsert() aqui.
+ */
+async function enviarLote(
+  fn: 'pros_upsert_eventos' | 'pros_upsert_marcas' | 'pros_upsert_contatos',
+  linhas: Record<string, unknown>[],
+  aoProgredir?: (feitas: number) => void,
+): Promise<number> {
+  const TAM = 400;
+  let total = 0;
+  for (let i = 0; i < linhas.length; i += TAM) {
+    const fatia = linhas.slice(i, i + TAM);
+    const { error } = await supabase.rpc(fn, { linhas: fatia });
+    if (error) throw error;
+    total += fatia.length;
+    aoProgredir?.(total);
+  }
+  return total;
+}
+
+export interface ResultadoImport {
+  eventos: number;
+  marcas: number;
+  contatos: number;
+}
+
+export async function importarProspeccao(
+  p: { eventos: Record<string, unknown>[]; marcas: Record<string, unknown>[]; contatos: Record<string, unknown>[] },
+  arquivo: string,
+  autor: string | null,
+  aoProgredir?: (etapa: string, feitas: number, total: number) => void,
+): Promise<ResultadoImport> {
+  const eventos = await enviarLote('pros_upsert_eventos', p.eventos, (n) =>
+    aoProgredir?.('Eventos', n, p.eventos.length));
+  const marcas = await enviarLote('pros_upsert_marcas', p.marcas, (n) =>
+    aoProgredir?.('Marcas', n, p.marcas.length));
+  const contatos = await enviarLote('pros_upsert_contatos', p.contatos, (n) =>
+    aoProgredir?.('Contatos', n, p.contatos.length));
+
+  const { error } = await supabase
+    .from('pros_importacoes')
+    .insert({ arquivo, eventos, marcas, contatos, autor });
+  if (error) throw error; // o log falhou, mas os dados entraram — melhor a pessoa saber
+  return { eventos, marcas, contatos };
+}
+
+/**
+ * Promove um evento do radar a negócio no funil.
+ * Reusa cliente + negócio existentes: o "cliente" é o ORGANIZADOR do evento
+ * (é com ele que se negocia a ativação), e o negócio nasce em `lead` na linha
+ * de ativação em evento. Se já existir cliente com o mesmo nome, reaproveita
+ * em vez de duplicar.
+ */
+export async function promoverEvento(
+  ev: ProsEvento,
+  responsavel: string | null,
+): Promise<{ negocioId: string; clienteId: string; clienteNovo: boolean }> {
+  const nomeCliente = ev.organizador?.trim() || ev.nome;
+
+  const { data: existentes, error: buscaErr } = await supabase
+    .from('clientes')
+    .select('id')
+    .ilike('nome', nomeCliente)
+    .limit(1);
+  if (buscaErr) throw buscaErr;
+
+  let clienteId = existentes?.[0]?.id as string | undefined;
+  const clienteNovo = !clienteId;
+
+  if (!clienteId) {
+    const cliente = await createCliente({
+      nome: nomeCliente,
+      tipo: 'corporativo',
+      segmento: ev.setor,
+      email: ev.email_comercial,
+      telefone: ev.telefone,
+      uf: ev.uf,
+      origem: 'Prospecção ativa',
+      responsavel,
+      status: 'Lead',
+    });
+    clienteId = cliente.id;
+    // Mesmo comportamento do cadastro manual de cliente: abre o projeto no
+    // Planner. Melhor-esforço — se falhar, o negócio ainda tem que nascer.
+    try {
+      const projetoId = await criarProjetoNoPlanner(nomeCliente);
+      await updateCliente(clienteId, { planner_project_id: projetoId });
+    } catch (e) {
+      console.warn('Não criou o projeto no Planner:', e);
+    }
+  }
+
+  const quando = ev.data_inicio ? ` — ${ev.data_inicio.split('-').reverse().join('/')}` : '';
+  const negocio = await createNegocio({
+    titulo: `${ev.nome}${quando}`,
+    cliente_id: clienteId,
+    linha: 'evento',
+    etapa: 'lead',
+    probabilidade: PROBABILIDADE_PADRAO.lead,
+    valor: 0,
+    responsavel,
+    previsao_fechamento: ev.data_inicio && /^\d{4}-\d{2}-\d{2}$/.test(ev.data_inicio) ? ev.data_inicio : null,
+    proxima_acao: ev.cota === 'aberta' ? 'Falar com o organizador sobre a cota de patrocínio' : 'Qualificar o evento',
+  });
+
+  await registrarHistorico(negocio.id, null, 'lead', responsavel);
+
+  // Deixa no negócio o que o robô descobriu, pra ninguém ter que voltar no radar.
+  const contexto = [
+    `Veio do radar de prospecção (evento ${ev.id}).`,
+    ev.local ? `Local: ${ev.local}` : null,
+    ev.publico_estimado ? `Público estimado: ${ev.publico_estimado}` : null,
+    ev.cota ? `Cota de patrocínio: ${ev.cota}${ev.cota_prazo ? ` (prazo ${ev.cota_prazo})` : ''}` : null,
+    ev.site ? `Site: ${ev.site}` : null,
+    ev.patrocinio_pagina ? `Patrocínio: ${ev.patrocinio_pagina}` : null,
+    ev.justificativa_fit ? `Fit ${ev.fit}/5 — ${ev.justificativa_fit}` : null,
+  ].filter(Boolean).join('\n');
+
+  await createAtividade({
+    negocio_id: negocio.id,
+    cliente_id: clienteId,
+    tipo: 'nota',
+    descricao: contexto,
+    autor: responsavel,
+    origem: 'crm',
+  });
+
+  await updateProsEvento(ev.id, { negocio_id: negocio.id, status_comercial: 'abordado' });
+
+  return { negocioId: negocio.id, clienteId, clienteNovo };
 }
 
 /* ---------- Integração com o Suricatus Planner ---------- */

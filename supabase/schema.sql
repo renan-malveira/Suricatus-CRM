@@ -120,6 +120,184 @@ create table if not exists public.contatos (
   created_at timestamptz not null default now()
 );
 
+-- ============================================================
+--  (8) RADAR DE PROSPECÇÃO
+--  Base gerada por um robô externo e entregue como base_prospeccao.xlsx.
+--  A chave primária é o `id` DO ROBÔ (text), não um uuid — é ele que mantém
+--  a sincronia entre a planilha e o banco. Nunca gerar id aqui.
+--
+--  CONTRATO (vem do "Leia-me" da planilha, respeitar sempre):
+--    - colunas de PESQUISA: o robô reescreve todo dia -> o import sobrescreve.
+--    - colunas COMERCIAIS (status/responsavel/notas): são da Amanda/Renan
+--      -> o import NUNCA as toca. Ver `pros_upsert_*` mais abaixo.
+-- ============================================================
+
+create table if not exists public.pros_eventos (
+  id text primary key,
+  -- pesquisa (robô)
+  nome text not null default '',
+  edicao text, setor text, setores_secundarios text, formato text, status text,
+  data_inicio text, data_fim text, precisao_data text, urgencia text,
+  cidade text, uf text, local text, site text,
+  fit int, justificativa_fit text, alvo text, publico_estimado text,
+  organizador text, organizador_site text, email_comercial text, telefone text,
+  patrocinio_pagina text, cota text, cota_prazo text, area_expositiva text,
+  patrocinadores text, expositores text, marcas_pesquisadas text,
+  primeiro_visto text, ultima_verificacao text, proxima_revisita text, fonte text,
+  -- comercial (nosso)
+  status_comercial text not null default 'novo',
+  responsavel text,
+  notas text,
+  negocio_id uuid references public.negocios(id) on delete set null,
+  importado_em timestamptz not null default now()
+);
+
+create table if not exists public.pros_marcas (
+  id text primary key,
+  marca text not null default '',
+  setores text, n_eventos int, eventos text, papeis text,
+  site text, linkedin text, status_busca text, n_contatos int, primeiro_visto text,
+  importado_em timestamptz not null default now()
+);
+
+create table if not exists public.pros_contatos (
+  id text primary key,
+  marca text, nome text not null default '', cargo text, area text, nivel text,
+  prioridade int, linkedin text, email text, telefone text,
+  confianca text, fonte text, tipo_fonte text, primeiro_visto text,
+  status_contato text not null default 'novo',
+  notas text,
+  importado_em timestamptz not null default now()
+);
+
+-- Log de cada importação, pra saber de quando é o dado que está na tela.
+create table if not exists public.pros_importacoes (
+  id uuid primary key default gen_random_uuid(),
+  arquivo text,
+  eventos int not null default 0,
+  marcas int not null default 0,
+  contatos int not null default 0,
+  autor text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_pros_ev_urgencia on public.pros_eventos(urgencia);
+create index if not exists idx_pros_ev_data on public.pros_eventos(data_inicio);
+create index if not exists idx_pros_ev_negocio on public.pros_eventos(negocio_id) where negocio_id is not null;
+create index if not exists idx_pros_ct_marca on public.pros_contatos(marca);
+create index if not exists idx_pros_mc_marca on public.pros_marcas(marca);
+
+-- ---------- Upsert que preserva as colunas comerciais ----------
+-- O cliente manda o payload inteiro do robô; estas funções fazem
+-- "insert ... on conflict do update" listando SÓ as colunas de pesquisa.
+-- Assim status_comercial/responsavel/notas/negocio_id sobrevivem a toda
+-- reimportação, que é exatamente o que o Leia-me promete.
+
+create or replace function public.pros_upsert_eventos(linhas jsonb)
+returns int language plpgsql security invoker set search_path = public as $$
+declare n int;
+begin
+  if not public.can_write() then raise exception 'sem permissao de escrita'; end if;
+  insert into public.pros_eventos (
+    id, nome, edicao, setor, setores_secundarios, formato, status,
+    data_inicio, data_fim, precisao_data, urgencia, cidade, uf, local, site,
+    fit, justificativa_fit, alvo, publico_estimado, organizador, organizador_site,
+    email_comercial, telefone, patrocinio_pagina, cota, cota_prazo, area_expositiva,
+    patrocinadores, expositores, marcas_pesquisadas, primeiro_visto,
+    ultima_verificacao, proxima_revisita, fonte, importado_em,
+    -- só valem na PRIMEIRA vez que a linha entra (semeadas pelo que você já
+    -- tinha anotado no Excel); daí em diante o banco é o dono e o DO UPDATE
+    -- abaixo não as inclui.
+    status_comercial, responsavel, notas)
+  select
+    x.id, x.nome, x.edicao, x.setor, x.setores_secundarios, x.formato, x.status,
+    x.data_inicio, x.data_fim, x.precisao_data, x.urgencia, x.cidade, x.uf, x.local, x.site,
+    x.fit, x.justificativa_fit, x.alvo, x.publico_estimado, x.organizador, x.organizador_site,
+    x.email_comercial, x.telefone, x.patrocinio_pagina, x.cota, x.cota_prazo, x.area_expositiva,
+    x.patrocinadores, x.expositores, x.marcas_pesquisadas, x.primeiro_visto,
+    x.ultima_verificacao, x.proxima_revisita, x.fonte, now(),
+    coalesce(nullif(x.status_comercial, ''), 'novo'), nullif(x.responsavel, ''), nullif(x.notas, '')
+  from jsonb_to_recordset(linhas) as x(
+    id text, nome text, edicao text, setor text, setores_secundarios text, formato text, status text,
+    data_inicio text, data_fim text, precisao_data text, urgencia text, cidade text, uf text, local text, site text,
+    fit int, justificativa_fit text, alvo text, publico_estimado text, organizador text, organizador_site text,
+    email_comercial text, telefone text, patrocinio_pagina text, cota text, cota_prazo text, area_expositiva text,
+    patrocinadores text, expositores text, marcas_pesquisadas text, primeiro_visto text,
+    ultima_verificacao text, proxima_revisita text, fonte text,
+    status_comercial text, responsavel text, notas text)
+  where x.id is not null and x.id <> ''
+  on conflict (id) do update set
+    nome = excluded.nome, edicao = excluded.edicao, setor = excluded.setor,
+    setores_secundarios = excluded.setores_secundarios, formato = excluded.formato,
+    status = excluded.status, data_inicio = excluded.data_inicio, data_fim = excluded.data_fim,
+    precisao_data = excluded.precisao_data, urgencia = excluded.urgencia, cidade = excluded.cidade,
+    uf = excluded.uf, local = excluded.local, site = excluded.site, fit = excluded.fit,
+    justificativa_fit = excluded.justificativa_fit, alvo = excluded.alvo,
+    publico_estimado = excluded.publico_estimado, organizador = excluded.organizador,
+    organizador_site = excluded.organizador_site, email_comercial = excluded.email_comercial,
+    telefone = excluded.telefone, patrocinio_pagina = excluded.patrocinio_pagina,
+    cota = excluded.cota, cota_prazo = excluded.cota_prazo, area_expositiva = excluded.area_expositiva,
+    patrocinadores = excluded.patrocinadores, expositores = excluded.expositores,
+    marcas_pesquisadas = excluded.marcas_pesquisadas, primeiro_visto = excluded.primeiro_visto,
+    ultima_verificacao = excluded.ultima_verificacao, proxima_revisita = excluded.proxima_revisita,
+    fonte = excluded.fonte, importado_em = now();
+    -- status_comercial, responsavel, notas e negocio_id: intencionalmente FORA.
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+create or replace function public.pros_upsert_marcas(linhas jsonb)
+returns int language plpgsql security invoker set search_path = public as $$
+declare n int;
+begin
+  if not public.can_write() then raise exception 'sem permissao de escrita'; end if;
+  insert into public.pros_marcas (
+    id, marca, setores, n_eventos, eventos, papeis, site, linkedin,
+    status_busca, n_contatos, primeiro_visto, importado_em)
+  select x.id, x.marca, x.setores, x.n_eventos, x.eventos, x.papeis, x.site, x.linkedin,
+         x.status_busca, x.n_contatos, x.primeiro_visto, now()
+  from jsonb_to_recordset(linhas) as x(
+    id text, marca text, setores text, n_eventos int, eventos text, papeis text,
+    site text, linkedin text, status_busca text, n_contatos int, primeiro_visto text)
+  where x.id is not null and x.id <> ''
+  on conflict (id) do update set
+    marca = excluded.marca, setores = excluded.setores, n_eventos = excluded.n_eventos,
+    eventos = excluded.eventos, papeis = excluded.papeis, site = excluded.site,
+    linkedin = excluded.linkedin, status_busca = excluded.status_busca,
+    n_contatos = excluded.n_contatos, primeiro_visto = excluded.primeiro_visto,
+    importado_em = now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+create or replace function public.pros_upsert_contatos(linhas jsonb)
+returns int language plpgsql security invoker set search_path = public as $$
+declare n int;
+begin
+  if not public.can_write() then raise exception 'sem permissao de escrita'; end if;
+  insert into public.pros_contatos (
+    id, marca, nome, cargo, area, nivel, prioridade, linkedin, email, telefone,
+    confianca, fonte, tipo_fonte, primeiro_visto, importado_em,
+    status_contato, notas)  -- só na primeira entrada da linha; ver comentário em pros_upsert_eventos
+  select x.id, x.marca, x.nome, x.cargo, x.area, x.nivel, x.prioridade, x.linkedin,
+         x.email, x.telefone, x.confianca, x.fonte, x.tipo_fonte, x.primeiro_visto, now(),
+         coalesce(nullif(x.status_contato, ''), 'novo'), nullif(x.notas, '')
+  from jsonb_to_recordset(linhas) as x(
+    id text, marca text, nome text, cargo text, area text, nivel text, prioridade int,
+    linkedin text, email text, telefone text, confianca text, fonte text,
+    tipo_fonte text, primeiro_visto text, status_contato text, notas text)
+  where x.id is not null and x.id <> ''
+  on conflict (id) do update set
+    marca = excluded.marca, nome = excluded.nome, cargo = excluded.cargo, area = excluded.area,
+    nivel = excluded.nivel, prioridade = excluded.prioridade, linkedin = excluded.linkedin,
+    email = excluded.email, telefone = excluded.telefone, confianca = excluded.confianca,
+    fonte = excluded.fonte, tipo_fonte = excluded.tipo_fonte,
+    primeiro_visto = excluded.primeiro_visto, importado_em = now();
+    -- status_contato e notas: intencionalmente FORA.
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
 -- ---------- (6) Perfis / papéis de acesso ----------
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -194,12 +372,17 @@ alter table public.anexos    enable row level security;
 alter table public.negocio_etapa_historico enable row level security;
 alter table public.contatos  enable row level security;
 alter table public.profiles  enable row level security;
+alter table public.pros_eventos enable row level security;
+alter table public.pros_marcas enable row level security;
+alter table public.pros_contatos enable row level security;
+alter table public.pros_importacoes enable row level security;
 
 -- Tabelas de dados: todos os logados leem; só admin/editor escrevem.
 do $$
 declare t text;
 begin
-  foreach t in array array['clientes','negocios','atividades','anexos','negocio_etapa_historico','contatos'] loop
+  foreach t in array array['clientes','negocios','atividades','anexos','negocio_etapa_historico','contatos',
+                           'pros_eventos','pros_marcas','pros_contatos','pros_importacoes'] loop
     execute format('drop policy if exists "%1$s_all" on public.%1$s', t);
     execute format('drop policy if exists "equipe_all" on public.%1$s', t);
     execute format('drop policy if exists "%1$s_sel" on public.%1$s', t);
