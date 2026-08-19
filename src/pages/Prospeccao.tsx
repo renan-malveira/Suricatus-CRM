@@ -7,7 +7,7 @@ import {
 } from '../lib/db';
 import {
   marcasDoEvento, diasAte, ehQuente, indexarContatos, indexarNomes, rotularEventos,
-  csvDevolutiva, baixarArquivo,
+  csvDevolutiva, baixarArquivo, PERIODOS, janelaDe, naJanela, temDataExata, emAndamento, jaTerminou,
 } from '../lib/prospeccao';
 import { usePodeEscrever } from '../lib/RoleContext';
 import ImportarProspeccao from '../components/ImportarProspeccao';
@@ -52,6 +52,11 @@ export default function Prospeccao() {
   const [cota, setCota] = useState('');
   const [statusF, setStatusF] = useState('');
   const [soQuentes, setSoQuentes] = useState(false);
+  const [periodo, setPeriodo] = useState('');
+  const [de, setDe] = useState('');
+  const [ate, setAte] = useState('');
+  // "sem data" é um modo à parte: são os eventos que NENHUMA janela alcança.
+  const [soSemData, setSoSemData] = useState(false);
 
   const podeEscrever = usePodeEscrever();
   const navigate = useNavigate();
@@ -73,17 +78,22 @@ export default function Prospeccao() {
 
   function limpar() {
     setBusca(''); setUrgencia(''); setSetor(''); setUf(''); setFitMin('');
-    setCota(''); setStatusF(''); setSoQuentes(false); setLimite(LOTE);
+    setCota(''); setStatusF(''); setSoQuentes(false);
+    setPeriodo(''); setDe(''); setAte(''); setSoSemData(false); setLimite(LOTE);
   }
 
-  useEffect(() => { setLimite(LOTE); }, [aba, busca, urgencia, setor, uf, fitMin, cota, statusF, soQuentes]);
+  useEffect(() => {
+    setLimite(LOTE);
+  }, [aba, busca, urgencia, setor, uf, fitMin, cota, statusF, soQuentes, periodo, de, ate, soSemData]);
 
   const ctPorMarca = useMemo(() => indexarContatos(contatos), [contatos]);
   const nomesEv = useMemo(() => indexarNomes(eventos), [eventos]);
 
   const quentes = useMemo(() => eventos.filter((e) => ehQuente(e) && !e.negocio_id), [eventos]);
+  // Mesmo critério do filtro "próximos 30 dias" que este KPI aciona — senão o
+  // número da tela e o da lista discordam (evento em andamento entra num e não no outro).
   const prox30 = useMemo(
-    () => eventos.filter((e) => { const d = diasAte(e.data_inicio); return d !== null && d >= 0 && d <= 30; }),
+    () => eventos.filter((e) => naJanela(e, ...janelaDe('proximos30'))),
     [eventos],
   );
   const semTriagem = useMemo(() => eventos.filter((e) => e.status_comercial === 'novo').length, [eventos]);
@@ -98,11 +108,28 @@ export default function Prospeccao() {
     [eventos],
   );
 
+  /** Janela ativa: o período pronto e o intervalo digitado se cruzam (AND). */
+  const [janelaDe_, janelaAte_] = useMemo(() => {
+    const [pDe, pAte] = janelaDe(periodo);
+    const maior = (a: string | null, b: string | null) => (a && b ? (a > b ? a : b) : a ?? b);
+    const menor = (a: string | null, b: string | null) => (a && b ? (a < b ? a : b) : a ?? b);
+    return [maior(pDe, de || null), menor(pAte, ate || null)];
+  }, [periodo, de, ate]);
+
+  const filtrandoPorData = !!(janelaDe_ || janelaAte_);
+
+  /** Eventos que nenhum filtro de data alcança, porque o robô ainda não achou a data. */
+  const semData = useMemo(() => eventos.filter((e) => !temDataExata(e)), [eventos]);
+
   const eventosFiltrados = useMemo(() => {
     const q = busca.toLowerCase().trim();
     const hoje = new Date().toISOString().slice(0, 10);
     return eventos
       .filter((e) => {
+        if (soSemData) return !temDataExata(e);
+        // "já aconteceram" pede evento TERMINADO, não sobreposição de intervalo.
+        if (periodo === 'passados' && !jaTerminou(e)) return false;
+        if (!naJanela(e, janelaDe_, janelaAte_)) return false;
         if (soQuentes && !ehQuente(e)) return false;
         if (urgencia && e.urgencia !== urgencia) return false;
         if (setor && e.setor !== setor) return false;
@@ -116,13 +143,17 @@ export default function Prospeccao() {
         }
         return true;
       })
-      // agenda: o que já passou vai pro fim, não pro topo
+      // Agenda: acontecendo agora no topo, depois o que vem, e o que já passou no fim.
       .sort((a, b) => {
-        const x = a.data_inicio ?? '9999', y = b.data_inicio ?? '9999';
-        const pa = x < hoje ? 1 : 0, pb = y < hoje ? 1 : 0;
-        return pa !== pb ? pa - pb : x.localeCompare(y);
+        const ordem = (e: ProsEvento) => {
+          if (emAndamento(e)) return 0;
+          return (e.data_inicio ?? '9999') < hoje ? 2 : 1;
+        };
+        const oa = ordem(a), ob = ordem(b);
+        if (oa !== ob) return oa - ob;
+        return (a.data_inicio ?? '9999').localeCompare(b.data_inicio ?? '9999');
       });
-  }, [eventos, busca, urgencia, setor, uf, cota, statusF, fitMin, soQuentes]);
+  }, [eventos, busca, urgencia, setor, uf, cota, statusF, fitMin, soQuentes, janelaDe_, janelaAte_, soSemData, periodo]);
 
   const marcasFiltradas = useMemo(() => {
     const q = busca.toLowerCase().trim();
@@ -225,11 +256,14 @@ export default function Prospeccao() {
               <div className="v" style={{ color: 'var(--pink)' }}>{quentes.length}</div>
               <div className="s">urgente · cota aberta · fit 4-5</div>
             </div>
-            <div className="kpi">
+            <button
+              className={`kpi kpi-btn ${periodo === 'proximos30' ? 'on' : ''}`}
+              onClick={() => { setAba('eventos'); limpar(); setPeriodo(periodo === 'proximos30' ? '' : 'proximos30'); }}
+            >
               <div className="l">Próximos 30 dias</div>
               <div className="v" style={{ color: 'var(--warn)' }}>{prox30.length}</div>
-              <div className="s">eventos com data confirmada</div>
-            </div>
+              <div className="s">{periodo === 'proximos30' ? 'filtro ativo — clique pra tirar' : 'clique pra filtrar'}</div>
+            </button>
             <div className="kpi">
               <div className="l">Eventos mapeados</div>
               <div className="v">{eventos.length}</div>
@@ -281,6 +315,16 @@ export default function Prospeccao() {
                 <button className={`chip ${soQuentes ? 'on quente' : ''}`} onClick={() => setSoQuentes(!soQuentes)}>
                   🔥 Só as quentes
                 </button>
+                <select value={periodo} onChange={(e) => { setPeriodo(e.target.value); setSoSemData(false); }}>
+                  <option value="">Quando: qualquer data</option>
+                  {PERIODOS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+                <div className="periodo">
+                  <span>de</span>
+                  <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setSoSemData(false); }} />
+                  <span>até</span>
+                  <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setSoSemData(false); }} />
+                </div>
                 <select value={urgencia} onChange={(e) => setUrgencia(e.target.value)}>
                   <option value="">Urgência: todas</option>
                   {['urgente', 'proximo', 'radar', 'passado'].map((u) => <option key={u}>{u}</option>)}
@@ -345,6 +389,23 @@ export default function Prospeccao() {
             <button className="btn" onClick={limpar}>Limpar</button>
           </div>
 
+          {aba === 'eventos' && (filtrandoPorData || soSemData) && semData.length > 0 && (
+            <div className="nota-data">
+              {soSemData ? (
+                <>
+                  Mostrando só os <b>{semData.length} eventos sem data definida</b> — o robô ainda não achou
+                  quando acontecem. Continuam valendo: {semData.filter((e) => (e.fit ?? 0) >= 4).length} têm fit 4 ou 5.
+                  <button className="btn" onClick={() => setSoSemData(false)}>Voltar</button>
+                </>
+              ) : (
+                <>
+                  <b>{semData.length} eventos sem data definida</b> não entram em nenhum filtro de data.
+                  <button className="btn" onClick={() => setSoSemData(true)}>Ver só eles</button>
+                </>
+              )}
+            </div>
+          )}
+
           {aba === 'eventos' && (
             <Tabela
               total={eventosFiltrados.length}
@@ -367,8 +428,21 @@ export default function Prospeccao() {
                     linha={
                       <>
                         <td className="nowrap">
-                          {fmtData(e.data_inicio)}
-                          {d !== null && d >= 0 && d <= 60 && <div className="mini warn">em {d}d</div>}
+                          {/* precisão != dia_exato: o robô só sabe o mês/ano, não o dia */}
+                          {e.precisao_data && e.precisao_data !== 'dia_exato' && !temDataExata(e) ? (
+                            <span className="mini">sem data</span>
+                          ) : (
+                            <>
+                              {e.precisao_data && e.precisao_data !== 'dia_exato' && '~'}
+                              {fmtData(e.data_inicio)}
+                              {e.precisao_data && e.precisao_data !== 'dia_exato' && (
+                                <div className="mini">só o {e.precisao_data}</div>
+                              )}
+                              {emAndamento(e)
+                                ? <div className="mini agora">acontecendo agora</div>
+                                : d !== null && d >= 0 && d <= 60 && <div className="mini warn">em {d}d</div>}
+                            </>
+                          )}
                         </td>
                         <td>
                           <b>{e.nome}</b>

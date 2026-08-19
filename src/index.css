@@ -230,3 +230,14 @@ tr.det > td { background: var(--panel); white-space: normal; padding: 4px 14px 1
   .formgrid { grid-template-columns: 1fr; }
   .fields { grid-template-columns: 1fr; }
 }
+
+/* filtro de período */
+.periodo { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dim); }
+.periodo input[type=date] { width: auto; padding: 6px 8px; font-size: 12px; color-scheme: dark; }
+.nota-data { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 14px; font-size: 12.5px; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; }
+.nota-data b { color: #fff; }
+.nota-data .btn { padding: 5px 11px; font-size: 12px; }
+.kpi-btn { display: block; width: 100%; text-align: left; font-family: inherit; cursor: pointer; }
+.kpi-btn:hover { border-color: var(--line-2); background: var(--card-2); }
+.kpi-btn.on { border-color: var(--warn); background: var(--card-2); }
+.mini.agora { color: var(--good); font-weight: 600; }

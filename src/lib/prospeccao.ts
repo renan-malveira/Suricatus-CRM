@@ -174,6 +174,91 @@ export function diasAte(data: string | null): number | null {
   return Math.round((alvo.getTime() - hoje.getTime()) / 86400000);
 }
 
+/** A data é um dia exato utilizável em filtro? O robô também grava mês/ano/indefinida. */
+export function temDataExata(e: Pick<ProsEvento, 'data_inicio'>): boolean {
+  return !!e.data_inicio && /^\d{4}-\d{2}-\d{2}$/.test(e.data_inicio);
+}
+
+/**
+ * Períodos prontos do filtro "Quando".
+ * Nada aqui é relativo a "hoje" na hora de comparar: a janela é resolvida uma
+ * vez em `janelaDe` e comparada como string ISO, que ordena igual a data.
+ */
+export const PERIODOS = [
+  { id: 'proximos7', label: 'próximos 7 dias' },
+  { id: 'proximos30', label: 'próximos 30 dias' },
+  { id: 'proximos60', label: 'próximos 60 dias' },
+  { id: 'proximos90', label: 'próximos 90 dias' },
+  { id: 'futuros', label: 'ainda vão acontecer' },
+  { id: 'passados', label: 'já aconteceram' },
+] as const;
+
+export type Periodo = (typeof PERIODOS)[number]['id'];
+
+const iso = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** Resolve um período em [de, ate] no formato ISO. `null` em uma ponta = sem limite. */
+export function janelaDe(periodo: string): [string | null, string | null] {
+  const hoje = new Date(new Date().toDateString());
+  const mais = (dias: number) => {
+    const d = new Date(hoje);
+    d.setDate(d.getDate() + dias);
+    return iso(d);
+  };
+  switch (periodo) {
+    case 'proximos7': return [iso(hoje), mais(7)];
+    case 'proximos30': return [iso(hoje), mais(30)];
+    case 'proximos60': return [iso(hoje), mais(60)];
+    case 'proximos90': return [iso(hoje), mais(90)];
+    case 'futuros': return [iso(hoje), null];
+    case 'passados': return [null, mais(-1)];
+    default: return [null, null];
+  }
+}
+
+/**
+ * O evento cai na janela? Compara o INTERVALO do evento (início→fim) com a
+ * janela, não só a data de início: uma feira que começa dia 28 e termina dia 2
+ * tem que aparecer em "próximos 30 dias" mesmo que a janela feche dia 30.
+ */
+export function naJanela(
+  e: Pick<ProsEvento, 'data_inicio' | 'data_fim'>,
+  de: string | null,
+  ate: string | null,
+): boolean {
+  if (!de && !ate) return true;
+  const ini = e.data_inicio;
+  if (!ini || !/^\d{4}-\d{2}-\d{2}$/.test(ini)) return false;
+  const fim = fimDoEvento(e)!;
+  if (de && fim < de) return false;
+  if (ate && ini > ate) return false;
+  return true;
+}
+
+/** Último dia do evento (cai no início quando não há fim válido). */
+export function fimDoEvento(e: Pick<ProsEvento, 'data_inicio' | 'data_fim'>): string | null {
+  if (!temDataExata(e)) return null;
+  const ini = e.data_inicio!;
+  return e.data_fim && /^\d{4}-\d{2}-\d{2}$/.test(e.data_fim) && e.data_fim > ini ? e.data_fim : ini;
+}
+
+/**
+ * Já terminou? Usado só pelo período "já aconteceram", que NÃO pode usar a
+ * sobreposição de intervalo: uma feira que começou ontem e termina amanhã
+ * sobrepõe a janela do passado, mas não aconteceu — está acontecendo.
+ */
+export function jaTerminou(e: Pick<ProsEvento, 'data_inicio' | 'data_fim'>): boolean {
+  const fim = fimDoEvento(e);
+  return !!fim && fim < new Date().toISOString().slice(0, 10);
+}
+
+/** Está rolando agora? Começou e ainda não terminou. É o mais urgente que existe. */
+export function emAndamento(e: Pick<ProsEvento, 'data_inicio' | 'data_fim'>): boolean {
+  if (!temDataExata(e)) return false;
+  const hoje = new Date().toISOString().slice(0, 10);
+  return e.data_inicio! <= hoje && fimDoEvento(e)! >= hoje;
+}
+
 /** É oportunidade quente? urgente + cota aberta + fit alto. É o recorte que cabe numa semana. */
 export function ehQuente(e: Pick<ProsEvento, 'urgencia' | 'cota' | 'fit'>): boolean {
   return e.urgencia === 'urgente' && e.cota === 'aberta' && (e.fit ?? 0) >= 4;
