@@ -160,7 +160,7 @@ label { display: block; font-size: 11px; color: var(--dim); text-transform: uppe
 
 /* ---------- Radar de prospecção ---------- */
 .lead-modal { max-width: 760px; }
-.leads-table { min-width: 1390px; }
+.leads-table { min-width: 1300px; }
 .lead-interessado { background: rgba(46,204,155,.16); color: #8ff0d3; }
 .lead-convertido { background: rgba(0,188,212,.16); color: #7fe3f0; }
 .lead-sem_interesse { background: rgba(255,255,255,.06); color: var(--dim); }
@@ -184,6 +184,10 @@ label { display: block; font-size: 11px; color: var(--dim); text-transform: uppe
 .date-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 142px; min-width: 142px; padding: 6px 8px; font-size: 11.5px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--card-2); color: var(--muted); cursor: pointer; text-align: left; font-variant-numeric: tabular-nums; }
 .date-inline:hover, .date-inline[aria-expanded="true"] { border-color: var(--cyan); color: #fff; }
 .date-inline:disabled { opacity: .55; cursor: not-allowed; }
+.lead-date-stack { display: grid; gap: 7px; min-width: 154px; }
+.lead-date-stack > div { display: grid; gap: 3px; }
+.lead-date-label { color: var(--dim); font-size: 9px; line-height: 1.1; text-transform: uppercase; letter-spacing: .04em; }
+.lead-date-stack .date-inline { width: 150px; min-width: 150px; }
 .date-auto { cursor: default; color: #8fe3f0; border-color: rgba(0,188,212,.22); }
 .date-auto span:last-child { font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
 .lead-followup-hint { padding: 8px 0; color: var(--dim); font-size: 11px; line-height: 1.45; }

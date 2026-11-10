@@ -185,7 +185,7 @@ export default function Leads() {
       </select></div>
     {!visiveis.length ? <div className="empty">Nenhum lead nesta lista. Cadastre empresas que ainda estão na etapa de primeiro contato.</div> :
     <div className="tbl-wrap"><table className="leads-table"><thead><tr>
-      <th>Empresa / contato</th><th>Segmento</th><th>Canal</th><th>Etapa</th><th>Status</th><th>Último contato</th><th>Follow-up</th><th>Reunião</th><th>Gancho</th><th></th>
+      <th>Empresa / contato</th><th>Segmento</th><th>Canal</th><th>Etapa</th><th>Status</th><th>Contato / follow-up</th><th>Reunião</th><th>Gancho</th><th></th>
     </tr></thead><tbody>{visiveis.map(l => <tr key={l.id}>
       <td className="wrapcell"><b>{l.empresa}</b><div className="mini">{l.contato_nome || 'Contato a identificar'}{l.contato_cargo ? ` · ${l.contato_cargo}` : ''}</div>
         {l.linkedin && <a className="lk" href={l.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a>}</td>
@@ -193,8 +193,7 @@ export default function Leads() {
       <td>{l.canal || '—'}</td>
       <td><select className={`lead-select etapa-${l.etapa}`} aria-label={`Etapa — ${l.empresa}`} value={l.etapa} disabled={!podeEscrever} onChange={e => alterarEtapa(l, e.target.value as EtapaLead)}>{ETAPAS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></td>
       <td><select className={`lead-select resultado-${l.status_resultado}`} aria-label={`Status — ${l.empresa}`} value={l.status_resultado} disabled={!podeEscrever} onChange={e => alterarResultado(l, e.target.value as StatusResultadoLead)}>{RESULTADOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></td>
-      <td><button type="button" className="date-inline" aria-label={`Último contato — ${l.empresa}`} aria-haspopup="dialog" aria-expanded={calendario?.id === l.id && calendario.campo === 'primeiro_contato_em'} disabled={!podeEscrever} onClick={e => abrirCalendario(e, l, 'primeiro_contato_em')}><span>{dataCurta(l.primeiro_contato_em)}</span><span aria-hidden="true">▾</span></button></td>
-      <td><span className="date-inline date-auto" title="Calculado automaticamente para cinco dias úteis após o contato"><span>{dataCurta(l.proximo_follow_up)}</span><span aria-hidden="true">Auto</span></span></td>
+      <td><div className="lead-date-stack"><div><span className="lead-date-label">Último contato</span><button type="button" className="date-inline" aria-label={`Último contato — ${l.empresa}`} aria-haspopup="dialog" aria-expanded={calendario?.id === l.id && calendario.campo === 'primeiro_contato_em'} disabled={!podeEscrever} onClick={e => abrirCalendario(e, l, 'primeiro_contato_em')}><span>{dataCurta(l.primeiro_contato_em)}</span><span aria-hidden="true">▾</span></button></div><div><span className="lead-date-label">Follow-up · automático</span><span className="date-inline date-auto"><span>{dataCurta(l.proximo_follow_up)}</span><span aria-hidden="true">Auto</span></span></div></div></td>
       <td>{dataCurta(l.reuniao_em)}</td><td className="wrapcell">{l.motivo_contato || l.notas || '—'}</td>
       <td className="nowrap">{podeEscrever && <>
         {l.etapa === 'interessado' && l.status_resultado !== 'perdido' && !l.cliente_id && <button className="btn" onClick={() => converter(l)}>Criar cliente</button>}
