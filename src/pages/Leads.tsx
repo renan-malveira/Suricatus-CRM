@@ -169,7 +169,7 @@ export default function Leads() {
       const diasNoMes = new Date(calendario.mes.getFullYear(), calendario.mes.getMonth() + 1, 0).getDate();
       const valorAtual = lead[calendario.campo]?.slice(0, 10);
       const posicao = calendario.ancora.getBoundingClientRect();
-      const top = Math.max(8, Math.min(posicao.bottom + 6, window.innerHeight - 360));
+      const top = Math.max(8, Math.min(posicao.bottom + 6, window.innerHeight - 430));
       const left = Math.max(8, Math.min(posicao.left, window.innerWidth - 280));
       const escolherHoje = () => {
         const hoje = new Date();
