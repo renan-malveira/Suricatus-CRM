@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Lead, StatusLead, TipoCliente } from '../lib/types';
+import type { EtapaLead, Lead, StatusLead, StatusResultadoLead, TipoCliente } from '../lib/types';
 import { createCliente, createLead, deleteLead, listClientes, listLeads, updateLead, agendarReuniaoLead } from '../lib/db';
 import { usePodeEscrever } from '../lib/RoleContext';
 import { TIPOS_CLIENTE } from '../lib/constants';
+import { calcularFollowUp } from '../lib/followUp';
 
-const STATUS: { id: StatusLead; label: string }[] = [
-  { id: 'novo', label: 'Novo' }, { id: 'contatado', label: 'Primeiro contato feito' },
-  { id: 'respondeu', label: 'Respondeu' }, { id: 'interessado', label: 'Demonstrou interesse' },
-  { id: 'sem_interesse', label: 'Sem interesse' }, { id: 'convertido', label: 'Convertido em cliente' },
+const ETAPAS: { id: EtapaLead; label: string; legado: StatusLead }[] = [
+  { id: 'novo', label: 'Novo', legado: 'novo' },
+  { id: 'primeiro_contato', label: 'Primeiro contato', legado: 'contatado' },
+  { id: 'follow_up', label: 'Follow-up', legado: 'contatado' },
+  { id: 'respondeu', label: 'Respondeu', legado: 'respondeu' },
+  { id: 'interessado', label: 'Demonstrou interesse', legado: 'interessado' },
+  { id: 'reuniao_agendada', label: 'Reunião agendada', legado: 'interessado' },
+  { id: 'reuniao_realizada', label: 'Reunião realizada', legado: 'interessado' },
+];
+const RESULTADOS: { id: StatusResultadoLead; label: string }[] = [
+  { id: 'aberto', label: 'Em andamento' }, { id: 'ganho', label: 'Ganho' }, { id: 'perdido', label: 'Perdido' },
 ];
 const dataCurta = (s: string | null) => s ? new Date(`${s.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—';
-type CampoDataLead = 'primeiro_contato_em' | 'proximo_follow_up';
+type CampoDataLead = 'primeiro_contato_em';
 type CalendarioAberto = { id: string; campo: CampoDataLead; mes: Date; ancora: HTMLButtonElement };
 
 export default function Leads() {
@@ -19,7 +27,7 @@ export default function Leads() {
   const [clientes, setClientes] = useState<{ id: string; nome: string }[]>([]);
   const [editando, setEditando] = useState<Lead | null | undefined>(undefined);
   const [busca, setBusca] = useState('');
-  const [filtro, setFiltro] = useState<StatusLead | 'todos'>('todos');
+  const [filtro, setFiltro] = useState<StatusResultadoLead | 'todos'>('todos');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [calendario, setCalendario] = useState<CalendarioAberto | null>(null);
@@ -56,13 +64,17 @@ export default function Leads() {
   }, [calendario]);
 
   const visiveis = useMemo(() => leads.filter(l =>
-    (filtro === 'todos' || l.status === filtro) &&
+    (filtro === 'todos' || l.status_resultado === filtro) &&
     [l.empresa, l.contato_nome, l.contato_cargo, l.segmento].some(v => v?.toLowerCase().includes(busca.toLowerCase()))
   ), [leads, filtro, busca]);
 
   async function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const etapa = String(fd.get('etapa')) as EtapaLead;
+    const statusResultado = String(fd.get('status_resultado')) as StatusResultadoLead;
+    const statusLegado: StatusLead = editando?.cliente_id ? editando.status :
+      statusResultado === 'perdido' ? 'sem_interesse' : ETAPAS.find(s => s.id === etapa)?.legado ?? 'novo';
     const payload: Partial<Lead> = {
       empresa: String(fd.get('empresa')).trim(), site: String(fd.get('site') || '').trim() || null,
       tipo_cliente: String(fd.get('tipo_cliente')) as TipoCliente,
@@ -71,9 +83,12 @@ export default function Leads() {
       contato_cargo: String(fd.get('contato_cargo') || '').trim() || null, linkedin: String(fd.get('linkedin') || '').trim() || null,
       email: String(fd.get('email') || '').trim() || null, telefone: String(fd.get('telefone') || '').trim() || null,
       motivo_contato: String(fd.get('motivo_contato') || '').trim() || null, mensagem: String(fd.get('mensagem') || '').trim() || null,
-      canal: String(fd.get('canal') || '').trim() || null, status: String(fd.get('status')) as StatusLead,
+      canal: String(fd.get('canal') || '').trim() || null,
+      status: statusLegado,
+      etapa,
+      status_resultado: statusResultado,
       primeiro_contato_em: String(fd.get('primeiro_contato_em') || '') || null,
-      proximo_follow_up: String(fd.get('proximo_follow_up') || '') || null,
+      proximo_follow_up: calcularFollowUp(String(fd.get('primeiro_contato_em') || '') || null),
       reuniao_em: String(fd.get('reuniao_em') || '') || null, notas: String(fd.get('notas') || '').trim() || null,
     };
     try {
@@ -84,7 +99,7 @@ export default function Leads() {
   }
 
   async function alterarData(l: Lead, campo: CampoDataLead, valor: string) {
-    const patch: Partial<Lead> = { [campo]: valor || null };
+    const patch: Partial<Lead> = { [campo]: valor || null, proximo_follow_up: calcularFollowUp(valor || null) };
     try {
       await updateLead(l.id, patch);
       setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
@@ -104,6 +119,27 @@ export default function Leads() {
     if (await alterarData(l, campo, valor)) setCalendario(null);
   }
 
+  async function alterarEtapa(l: Lead, etapa: EtapaLead) {
+    const patch: Partial<Lead> = { etapa, status: l.cliente_id ? l.status : ETAPAS.find(e => e.id === etapa)?.legado ?? l.status };
+    try {
+      await updateLead(l.id, patch);
+      setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
+      setErro('');
+    } catch (e) { setErro((e as Error).message); }
+  }
+
+  async function alterarResultado(l: Lead, status_resultado: StatusResultadoLead) {
+    const status = l.cliente_id ? l.status : status_resultado === 'perdido' ? 'sem_interesse' :
+      status_resultado === 'aberto' && ['sem_interesse', 'convertido'].includes(l.status)
+        ? ETAPAS.find(e => e.id === l.etapa)?.legado ?? 'contatado' : l.status;
+    const patch: Partial<Lead> = { status_resultado, status };
+    try {
+      await updateLead(l.id, patch);
+      setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
+      setErro('');
+    } catch (e) { setErro((e as Error).message); }
+  }
+
   async function converter(l: Lead) {
     if (clientes.some(c => c.nome.trim().toLowerCase() === l.empresa.trim().toLowerCase())) {
       setErro(`Já existe um cliente chamado ${l.empresa}. Abra Clientes e vincule o registro existente antes de converter.`);
@@ -113,7 +149,7 @@ export default function Leads() {
       const c = await createCliente({ nome: l.empresa, tipo: l.tipo_cliente, segmento: l.segmento, contato_nome: l.contato_nome,
         contato_cargo: l.contato_cargo, email: l.email, telefone: l.telefone, uf: l.uf,
         origem: 'Prospecção ativa', status: 'Cliente potencial' });
-      await updateLead(l.id, { status: 'convertido', cliente_id: c.id });
+      await updateLead(l.id, { status: 'convertido', status_resultado: 'ganho', cliente_id: c.id });
       setErro(''); await carregar();
     } catch (e) { setErro((e as Error).message); }
   }
@@ -138,23 +174,30 @@ export default function Leads() {
       <span className="mini">Prospecção inicial · Clientes após interesse · Funil após reunião</span><div className="spacer" />
       {podeEscrever && <button className="btn cyan" onClick={() => setEditando(null)}>+ Novo lead</button>}
     </div>
+    <div className="lead-kpis">
+      <div className="lead-kpi"><span>Em andamento</span><b>{leads.filter(l => l.status_resultado === 'aberto').length}</b></div>
+      <div className="lead-kpi ganho"><span>Ganhos</span><b>{leads.filter(l => l.status_resultado === 'ganho').length}</b></div>
+      <div className="lead-kpi perdido"><span>Perdidos</span><b>{leads.filter(l => l.status_resultado === 'perdido').length}</b></div>
+    </div>
     <div className="filtros"><input type="search" placeholder="Buscar empresa ou contato…" value={busca} onChange={e => setBusca(e.target.value)} />
-      <select value={filtro} onChange={e => setFiltro(e.target.value as StatusLead | 'todos')}>
-        <option value="todos">Todos os status</option>{STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+      <select value={filtro} onChange={e => setFiltro(e.target.value as StatusResultadoLead | 'todos')}>
+        <option value="todos">Todos os status</option>{RESULTADOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
       </select></div>
     {!visiveis.length ? <div className="empty">Nenhum lead nesta lista. Cadastre empresas que ainda estão na etapa de primeiro contato.</div> :
     <div className="tbl-wrap"><table className="leads-table"><thead><tr>
-      <th>Empresa / contato</th><th>Segmento</th><th>Canal</th><th>Status</th><th>Último contato</th><th>Follow-up</th><th>Reunião</th><th>Gancho</th><th></th>
+      <th>Empresa / contato</th><th>Segmento</th><th>Canal</th><th>Etapa</th><th>Status</th><th>Último contato</th><th>Follow-up</th><th>Reunião</th><th>Gancho</th><th></th>
     </tr></thead><tbody>{visiveis.map(l => <tr key={l.id}>
       <td className="wrapcell"><b>{l.empresa}</b><div className="mini">{l.contato_nome || 'Contato a identificar'}{l.contato_cargo ? ` · ${l.contato_cargo}` : ''}</div>
         {l.linkedin && <a className="lk" href={l.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a>}</td>
       <td>{l.segmento || '—'}{l.cidade ? <div className="mini">{l.cidade}{l.uf ? `, ${l.uf}` : ''}</div> : null}</td>
-      <td>{l.canal || '—'}</td><td><span className={`pill lead-${l.status}`}>{STATUS.find(s => s.id === l.status)?.label ?? l.status}</span></td>
+      <td>{l.canal || '—'}</td>
+      <td><select className={`lead-select etapa-${l.etapa}`} aria-label={`Etapa — ${l.empresa}`} value={l.etapa} disabled={!podeEscrever} onChange={e => alterarEtapa(l, e.target.value as EtapaLead)}>{ETAPAS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></td>
+      <td><select className={`lead-select resultado-${l.status_resultado}`} aria-label={`Status — ${l.empresa}`} value={l.status_resultado} disabled={!podeEscrever} onChange={e => alterarResultado(l, e.target.value as StatusResultadoLead)}>{RESULTADOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></td>
       <td><button type="button" className="date-inline" aria-label={`Último contato — ${l.empresa}`} aria-haspopup="dialog" aria-expanded={calendario?.id === l.id && calendario.campo === 'primeiro_contato_em'} disabled={!podeEscrever} onClick={e => abrirCalendario(e, l, 'primeiro_contato_em')}><span>{dataCurta(l.primeiro_contato_em)}</span><span aria-hidden="true">▾</span></button></td>
-      <td><button type="button" className="date-inline" aria-label={`Follow-up — ${l.empresa}`} aria-haspopup="dialog" aria-expanded={calendario?.id === l.id && calendario.campo === 'proximo_follow_up'} disabled={!podeEscrever} onClick={e => abrirCalendario(e, l, 'proximo_follow_up')}><span>{dataCurta(l.proximo_follow_up)}</span><span aria-hidden="true">▾</span></button></td>
+      <td><span className="date-inline date-auto" title="Calculado automaticamente para cinco dias úteis após o contato"><span>{dataCurta(l.proximo_follow_up)}</span><span aria-hidden="true">Auto</span></span></td>
       <td>{dataCurta(l.reuniao_em)}</td><td className="wrapcell">{l.motivo_contato || l.notas || '—'}</td>
       <td className="nowrap">{podeEscrever && <>
-        {l.status === 'interessado' && !l.cliente_id && <button className="btn" onClick={() => converter(l)}>Criar cliente</button>}
+        {l.etapa === 'interessado' && l.status_resultado !== 'perdido' && !l.cliente_id && <button className="btn" onClick={() => converter(l)}>Criar cliente</button>}
         {l.cliente_id && !l.negocio_id && l.reuniao_em && <button className="btn" onClick={() => agendarReuniao(l)}>Agendar reunião e incluir no funil</button>}
         {l.cliente_id && l.negocio_id && <span className="mini">No funil</span>}
         <button className="icobtn" title="Editar lead" onClick={() => setEditando(l)}>✎</button>
@@ -208,9 +251,10 @@ export default function Leads() {
           <div className="full"><label>LinkedIn público</label><input name="linkedin" type="url" placeholder="https://linkedin.com/in/…" defaultValue={editando?.linkedin ?? ''} /></div>
           <div><label>E-mail confirmado</label><input name="email" type="email" defaultValue={editando?.email ?? ''} /></div><div><label>Telefone confirmado</label><input name="telefone" defaultValue={editando?.telefone ?? ''} /></div>
           <div><label>Canal do primeiro contato</label><select name="canal" defaultValue={editando?.canal ?? 'LinkedIn'}><option>LinkedIn</option><option>E-mail</option><option>Telefone</option><option>WhatsApp</option><option>Outro</option></select></div>
-          <div><label>Status</label><select name="status" defaultValue={editando?.status ?? 'novo'}>{STATUS.filter(s => s.id !== 'convertido' || editando?.status === 'convertido').map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+          <div><label>Etapa</label><select name="etapa" defaultValue={editando?.etapa ?? 'novo'}>{ETAPAS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+          <div><label>Status</label><select name="status_resultado" defaultValue={editando?.status_resultado ?? 'aberto'}>{RESULTADOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
           <div><label>Data do primeiro contato</label><input name="primeiro_contato_em" type="date" defaultValue={editando?.primeiro_contato_em?.slice(0,10) ?? ''} /></div>
-          <div><label>Próximo follow-up</label><input name="proximo_follow_up" type="date" defaultValue={editando?.proximo_follow_up?.slice(0,10) ?? ''} /></div>
+          <div><label>Próximo follow-up</label><div className="lead-followup-hint">Calculado automaticamente para 5 dias úteis após o último contato, considerando fins de semana e feriados de São Paulo.</div></div>
           <div><label>Reunião agendada</label><input name="reuniao_em" type="date" defaultValue={editando?.reuniao_em?.slice(0,10) ?? ''} /></div>
           <div className="full"><label>Motivo / gancho de contato</label><textarea name="motivo_contato" rows={2} defaultValue={editando?.motivo_contato ?? ''} /></div>
           <div className="full"><label>Mensagem enviada</label><textarea name="mensagem" rows={3} defaultValue={editando?.mensagem ?? ''} /></div>

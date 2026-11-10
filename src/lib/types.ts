@@ -114,6 +114,8 @@ export type StatusProspeccao = 'novo' | 'analisando' | 'abordado' | 'descartado'
 export type StatusContatoPros = 'novo' | 'abordado' | 'respondeu' | 'descartado';
 
 export type StatusLead = 'novo' | 'contatado' | 'respondeu' | 'interessado' | 'sem_interesse' | 'convertido';
+export type EtapaLead = 'novo' | 'primeiro_contato' | 'follow_up' | 'respondeu' | 'interessado' | 'reuniao_agendada' | 'reuniao_realizada';
+export type StatusResultadoLead = 'aberto' | 'ganho' | 'perdido';
 
 /** Lead de prospecção comercial manual, independente do Radar de eventos. */
 export interface Lead {
@@ -133,6 +135,8 @@ export interface Lead {
   mensagem: string | null;
   canal: string | null;
   status: StatusLead;
+  etapa: EtapaLead;
+  status_resultado: StatusResultadoLead;
   primeiro_contato_em: string | null;
   proximo_follow_up: string | null;
   reuniao_em: string | null;
