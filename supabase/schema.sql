@@ -148,7 +148,8 @@ create table if not exists public.leads (
   notas text,
   cliente_id uuid references public.clientes(id) on delete set null,
   negocio_id uuid references public.negocios(id) on delete set null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists idx_leads_status on public.leads(status);
@@ -156,6 +157,23 @@ create index if not exists idx_leads_follow_up on public.leads(proximo_follow_up
 create index if not exists idx_leads_cliente on public.leads(cliente_id) where cliente_id is not null;
 create index if not exists idx_leads_negocio on public.leads(negocio_id) where negocio_id is not null;
 create unique index if not exists idx_leads_source_mensagem_id on public.leads(source_mensagem_id) where source_mensagem_id is not null;
+create index if not exists idx_leads_updated_at on public.leads(updated_at desc, created_at desc);
+
+create or replace function public.touch_lead_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_leads_updated_at on public.leads;
+create trigger trg_leads_updated_at
+before update on public.leads
+for each row execute function public.touch_lead_updated_at();
 
 -- ============================================================
 --  (8) RADAR DE PROSPECÇÃO

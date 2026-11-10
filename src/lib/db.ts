@@ -8,7 +8,9 @@ import { PROBABILIDADE_PADRAO } from './constants';
 /* ---------- Leads de prospecção ---------- */
 
 export async function listLeads(): Promise<Lead[]> {
-  const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('leads').select('*')
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
 }

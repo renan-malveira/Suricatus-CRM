@@ -38,6 +38,14 @@ export default function Leads() {
     } catch (e) { setErro((e as Error).message); }
     setCarregando(false);
   }
+
+  function atualizarNaLista(id: string, patch: Partial<Lead>) {
+    const atualizadoEm = new Date().toISOString();
+    setLeads(current => current
+      .map(item => item.id === id ? { ...item, ...patch, updated_at: atualizadoEm } : item)
+      .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+        || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+  }
   useEffect(() => { carregar(); }, []);
 
   useEffect(() => {
@@ -97,7 +105,7 @@ export default function Leads() {
     const patch: Partial<Lead> = { [campo]: valor || null, proximo_follow_up: calcularFollowUp(valor || null) };
     try {
       await updateLead(l.id, patch);
-      setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
+      atualizarNaLista(l.id, patch);
       setErro('');
       return true;
     } catch (e) { setErro((e as Error).message); }
@@ -118,7 +126,7 @@ export default function Leads() {
     const patch: Partial<Lead> = { etapa, status: l.cliente_id ? l.status : ETAPAS.find(e => e.id === etapa)?.legado ?? l.status };
     try {
       await updateLead(l.id, patch);
-      setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
+      atualizarNaLista(l.id, patch);
       setErro('');
     } catch (e) { setErro((e as Error).message); }
   }
@@ -130,7 +138,7 @@ export default function Leads() {
     const patch: Partial<Lead> = { status_resultado, status };
     try {
       await updateLead(l.id, patch);
-      setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
+      atualizarNaLista(l.id, patch);
       setErro('');
     } catch (e) { setErro((e as Error).message); }
   }
