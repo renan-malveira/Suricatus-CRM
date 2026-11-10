@@ -160,7 +160,12 @@ label { display: block; font-size: 11px; color: var(--dim); text-transform: uppe
 
 /* ---------- Radar de prospecção ---------- */
 .lead-modal { max-width: 760px; }
-.leads-table { min-width: 1300px; }
+.leads-table { min-width: 1650px; }
+.lead-event-cell { min-width: 250px; max-width: 360px; font-size: 11px; line-height: 1.45; }
+.lead-event-cell > div + div { margin-top: 3px; color: var(--muted); }
+.lead-event-cell details { margin-top: 4px; }
+.lead-event-cell summary { color: var(--cyan); cursor: pointer; font-size: 10px; }
+.lead-hook-cell { min-width: 230px; max-width: 340px; font-size: 11px; line-height: 1.45; }
 .lead-interessado { background: rgba(46,204,155,.16); color: #8ff0d3; }
 .lead-convertido { background: rgba(0,188,212,.16); color: #7fe3f0; }
 .lead-sem_interesse { background: rgba(255,255,255,.06); color: var(--dim); }

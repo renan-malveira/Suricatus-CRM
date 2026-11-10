@@ -132,12 +132,16 @@ create table if not exists public.leads (
   contato_nome text,
   contato_cargo text,
   linkedin text,
+  evento_prioritario text,
+  source_mensagem_id text,
   email text,
   telefone text,
   motivo_contato text,
   mensagem text,
   canal text,
   status text not null default 'novo' check (status in ('novo','contatado','respondeu','interessado','sem_interesse','convertido')),
+  etapa text not null default 'novo' check (etapa in ('novo','primeiro_contato','follow_up','respondeu','interessado')),
+  status_resultado text not null default 'aberto' check (status_resultado in ('aberto','ganho','perdido')),
   primeiro_contato_em date,
   proximo_follow_up date,
   reuniao_em date,
@@ -151,6 +155,7 @@ create index if not exists idx_leads_status on public.leads(status);
 create index if not exists idx_leads_follow_up on public.leads(proximo_follow_up) where proximo_follow_up is not null;
 create index if not exists idx_leads_cliente on public.leads(cliente_id) where cliente_id is not null;
 create index if not exists idx_leads_negocio on public.leads(negocio_id) where negocio_id is not null;
+create unique index if not exists idx_leads_source_mensagem_id on public.leads(source_mensagem_id) where source_mensagem_id is not null;
 
 -- ============================================================
 --  (8) RADAR DE PROSPECÇÃO
