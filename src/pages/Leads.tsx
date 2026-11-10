@@ -59,6 +59,15 @@ export default function Leads() {
     } catch (e) { setErro((e as Error).message); }
   }
 
+  async function alterarData(l: Lead, campo: 'primeiro_contato_em' | 'proximo_follow_up', valor: string) {
+    const patch: Partial<Lead> = { [campo]: valor || null };
+    try {
+      await updateLead(l.id, patch);
+      setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
+      setErro('');
+    } catch (e) { setErro((e as Error).message); }
+  }
+
   async function converter(l: Lead) {
     if (clientes.some(c => c.nome.trim().toLowerCase() === l.empresa.trim().toLowerCase())) {
       setErro(`Já existe um cliente chamado ${l.empresa}. Abra Clientes e vincule o registro existente antes de converter.`);
@@ -105,7 +114,9 @@ export default function Leads() {
         {l.linkedin && <a className="lk" href={l.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a>}</td>
       <td>{l.segmento || '—'}{l.cidade ? <div className="mini">{l.cidade}{l.uf ? `, ${l.uf}` : ''}</div> : null}</td>
       <td>{l.canal || '—'}</td><td><span className={`pill lead-${l.status}`}>{STATUS.find(s => s.id === l.status)?.label ?? l.status}</span></td>
-      <td>{dataCurta(l.primeiro_contato_em)}</td><td>{dataCurta(l.proximo_follow_up)}</td><td>{dataCurta(l.reuniao_em)}</td><td className="wrapcell">{l.motivo_contato || l.notas || '—'}</td>
+      <td><input className="date-inline" type="date" aria-label={`Último contato — ${l.empresa}`} value={l.primeiro_contato_em?.slice(0,10) ?? ''} disabled={!podeEscrever} onChange={e => alterarData(l, 'primeiro_contato_em', e.target.value)} /></td>
+      <td><input className="date-inline" type="date" aria-label={`Follow-up — ${l.empresa}`} value={l.proximo_follow_up?.slice(0,10) ?? ''} disabled={!podeEscrever} onChange={e => alterarData(l, 'proximo_follow_up', e.target.value)} /></td>
+      <td>{dataCurta(l.reuniao_em)}</td><td className="wrapcell">{l.motivo_contato || l.notas || '—'}</td>
       <td className="nowrap">{podeEscrever && <>
         {l.status === 'interessado' && !l.cliente_id && <button className="btn" onClick={() => converter(l)}>Criar cliente</button>}
         {l.cliente_id && !l.negocio_id && l.reuniao_em && <button className="btn" onClick={() => agendarReuniao(l)}>Agendar reunião e incluir no funil</button>}
