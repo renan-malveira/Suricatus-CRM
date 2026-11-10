@@ -159,6 +159,13 @@ label { display: block; font-size: 11px; color: var(--dim); text-transform: uppe
 .setup pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; }
 
 /* ---------- Radar de prospecção ---------- */
+.lead-modal { max-width: 760px; }
+.leads-table { min-width: 1180px; }
+.lead-interessado { background: rgba(46,204,155,.16); color: #8ff0d3; }
+.lead-convertido { background: rgba(0,188,212,.16); color: #7fe3f0; }
+.lead-sem_interesse { background: rgba(255,255,255,.06); color: var(--dim); }
+.lead-novo { background: rgba(255,255,255,.06); color: var(--muted); }
+.lead-contatado, .lead-respondeu { background: rgba(245,166,35,.14); color: #f5c169; }
 .kpis.kpis-5 { grid-template-columns: repeat(5, 1fr); }
 
 .filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }

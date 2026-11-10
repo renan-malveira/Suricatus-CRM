@@ -113,6 +113,35 @@ export type StatusProspeccao = 'novo' | 'analisando' | 'abordado' | 'descartado'
 /** Status de um contato do radar. */
 export type StatusContatoPros = 'novo' | 'abordado' | 'respondeu' | 'descartado';
 
+export type StatusLead = 'novo' | 'contatado' | 'respondeu' | 'interessado' | 'sem_interesse' | 'convertido';
+
+/** Lead de prospecção comercial manual, independente do Radar de eventos. */
+export interface Lead {
+  id: string;
+  empresa: string;
+  tipo_cliente: TipoCliente;
+  site: string | null;
+  cidade: string | null;
+  uf: string | null;
+  segmento: string | null;
+  contato_nome: string | null;
+  contato_cargo: string | null;
+  linkedin: string | null;
+  email: string | null;
+  telefone: string | null;
+  motivo_contato: string | null;
+  mensagem: string | null;
+  canal: string | null;
+  status: StatusLead;
+  primeiro_contato_em: string | null;
+  proximo_follow_up: string | null;
+  reuniao_em: string | null;
+  notas: string | null;
+  cliente_id: string | null;
+  negocio_id: string | null;
+  created_at: string;
+}
+
 export interface ProsEvento {
   id: string;
   nome: string;

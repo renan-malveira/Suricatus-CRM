@@ -1,9 +1,43 @@
 import { supabase, BUCKET_ANEXOS } from './supabase';
 import type {
   Cliente, Negocio, Atividade, Anexo, Contato, HistoricoEtapa, Profile, Role, Etapa, PlannerProjeto,
-  ProsEvento, ProsMarca, ProsContato, ProsImportacao,
+  ProsEvento, ProsMarca, ProsContato, ProsImportacao, Lead,
 } from './types';
 import { PROBABILIDADE_PADRAO } from './constants';
+
+/* ---------- Leads de prospecção ---------- */
+
+export async function listLeads(): Promise<Lead[]> {
+  const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createLead(l: Partial<Lead>): Promise<Lead> {
+  const { data, error } = await supabase.from('leads').insert(l).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateLead(id: string, l: Partial<Lead>): Promise<void> {
+  const { error } = await supabase.from('leads').update(l).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteLead(id: string): Promise<void> {
+  const { error } = await supabase.from('leads').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Agenda a reunião e cria o negócio no funil em uma única transação no banco. */
+export async function agendarReuniaoLead(id: string, data: string): Promise<string> {
+  const { data: negocioId, error } = await supabase.rpc('agendar_reuniao_lead', {
+    p_lead_id: id,
+    p_data: data,
+  });
+  if (error) throw error;
+  return negocioId as string;
+}
 
 /* ---------- Clientes ---------- */
 
