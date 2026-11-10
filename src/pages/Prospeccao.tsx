@@ -565,7 +565,7 @@ export default function Prospeccao() {
           onFechar={() => setImportando(false)}
           onPronto={(r) => {
             setImportando(false);
-            setAviso(`Importado: ${r.eventos} eventos, ${r.marcas.toLocaleString('pt-BR')} marcas, ${r.contatos} contatos. Suas anotações foram preservadas.`);
+            setAviso(`Importado: ${r.prioritarios} eventos prioritários, ${r.marcas.toLocaleString('pt-BR')} marcas, ${r.contatos} contatos. Suas anotações foram preservadas.`);
             carregar();
           }}
         />

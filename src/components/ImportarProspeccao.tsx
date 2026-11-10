@@ -27,6 +27,7 @@ export default function ImportarProspeccao({ autor, onFechar, onPronto }: Props)
 
       const brutos = {
         [ABAS.eventos]: planilha.ler(ABAS.eventos),
+        [ABAS.prioritarios]: planilha.ler(ABAS.prioritarios),
         [ABAS.marcas]: planilha.ler(ABAS.marcas),
         [ABAS.contatos]: planilha.ler(ABAS.contatos),
       };
@@ -34,6 +35,9 @@ export default function ImportarProspeccao({ autor, onFechar, onPronto }: Props)
 
       const payload = {
         eventos: brutos[ABAS.eventos].map(mapearEvento).filter((e) => e.id),
+        prioritarios: [...new Set(brutos[ABAS.prioritarios]
+          .map((linha) => String(linha.id ?? '').trim())
+          .filter(Boolean))],
         marcas: brutos[ABAS.marcas].map(mapearMarca).filter((m) => m.id),
         contatos: brutos[ABAS.contatos].map(mapearContato).filter((c) => c.id),
       };

@@ -7,7 +7,7 @@
 import type { Linha } from './xlsx';
 import type { ProsEvento, ProsMarca, ProsContato } from './types';
 
-export const ABAS = { eventos: 'Eventos', marcas: 'Marcas', contatos: 'Contatos' } as const;
+export const ABAS = { eventos: 'Eventos', prioritarios: '⭐ Prioritários', marcas: 'Marcas', contatos: 'Contatos' } as const;
 
 /**
  * O robô escreve esta frase quando não achou o dado. Ela é informação para
@@ -39,6 +39,7 @@ function txtOuNum(v: unknown): string | null {
 
 export interface Payloads {
   eventos: Record<string, unknown>[];
+  prioritarios: string[];
   marcas: Record<string, unknown>[];
   contatos: Record<string, unknown>[];
 }
@@ -56,6 +57,7 @@ export function validar(abas: string[], amostras: Record<string, Linha[]>): void
   }
   const obrigatorias: Record<string, string[]> = {
     [ABAS.eventos]: ['id', 'Nome', 'Urgência', 'Fit'],
+    [ABAS.prioritarios]: ['id', 'Evento', 'Data início'],
     [ABAS.marcas]: ['id', 'Marca'],
     [ABAS.contatos]: ['id', 'Nome', 'Marca'],
   };
@@ -70,6 +72,9 @@ export function validar(abas: string[], amostras: Record<string, Linha[]>): void
           `O robô pode ter mudado o cabeçalho — me avise antes de importar.`,
       );
     }
+  }
+  if (!(amostras[ABAS.prioritarios] ?? []).some((linha) => txt(linha.id))) {
+    throw new ErroImport(`A aba ${ABAS.prioritarios} não contém nenhum ID de evento.`);
   }
 }
 

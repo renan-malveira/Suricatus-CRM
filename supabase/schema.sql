@@ -166,6 +166,7 @@ create index if not exists idx_leads_negocio on public.leads(negocio_id) where n
 
 create table if not exists public.pros_eventos (
   id text primary key,
+  prioritario boolean not null default false,
   -- pesquisa (robô)
   nome text not null default '',
   edicao text, setor text, setores_secundarios text, formato text, status text,
@@ -215,6 +216,7 @@ create table if not exists public.pros_importacoes (
 
 create index if not exists idx_pros_ev_urgencia on public.pros_eventos(urgencia);
 create index if not exists idx_pros_ev_data on public.pros_eventos(data_inicio);
+create index if not exists idx_pros_eventos_prioritarios_data on public.pros_eventos(data_inicio) where prioritario = true;
 create index if not exists idx_pros_ev_negocio on public.pros_eventos(negocio_id) where negocio_id is not null;
 create index if not exists idx_pros_ct_marca on public.pros_contatos(marca);
 create index if not exists idx_pros_mc_marca on public.pros_marcas(marca);
@@ -277,6 +279,27 @@ begin
   get diagnostics n = row_count;
   return n;
 end $$;
+
+-- Sincroniza a seleção da aba ⭐ Prioritários sem apagar o restante do Radar.
+create or replace function public.pros_marcar_prioritarios(ids text[])
+returns int language plpgsql security invoker set search_path = public as $$
+declare n int;
+begin
+  if not public.can_write() then raise exception 'sem permissao de escrita'; end if;
+
+  select count(*) into n
+  from public.pros_eventos
+  where id = any(coalesce(ids, array[]::text[]));
+
+  update public.pros_eventos
+  set prioritario = (id = any(coalesce(ids, array[]::text[])))
+  where prioritario is distinct from (id = any(coalesce(ids, array[]::text[])));
+
+  return n;
+end $$;
+revoke all on function public.pros_marcar_prioritarios(text[]) from public;
+revoke all on function public.pros_marcar_prioritarios(text[]) from anon;
+grant execute on function public.pros_marcar_prioritarios(text[]) to authenticated;
 
 create or replace function public.pros_upsert_marcas(linhas jsonb)
 returns int language plpgsql security invoker set search_path = public as $$

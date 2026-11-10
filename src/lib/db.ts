@@ -320,12 +320,17 @@ export async function updateRole(id: string, role: Role): Promise<void> {
  */
 const PAGINA = 1000;
 
-async function lerTudo<T>(tabela: string, ordenar: string, asc = true): Promise<T[]> {
+async function lerTudo<T>(
+  tabela: string,
+  ordenar: string,
+  asc = true,
+  filtro?: { coluna: string; valor: string | number | boolean },
+): Promise<T[]> {
   const out: T[] = [];
   for (let de = 0; ; de += PAGINA) {
-    const { data, error } = await supabase
-      .from(tabela)
-      .select('*')
+    let consulta = supabase.from(tabela).select('*');
+    if (filtro) consulta = consulta.eq(filtro.coluna, filtro.valor);
+    const { data, error } = await consulta
       .order(ordenar, { ascending: asc, nullsFirst: false })
       .range(de, de + PAGINA - 1);
     if (error) throw error;
@@ -336,7 +341,7 @@ async function lerTudo<T>(tabela: string, ordenar: string, asc = true): Promise<
 }
 
 export function listProsEventos(): Promise<ProsEvento[]> {
-  return lerTudo<ProsEvento>('pros_eventos', 'data_inicio');
+  return lerTudo<ProsEvento>('pros_eventos', 'data_inicio', true, { coluna: 'prioritario', valor: true });
 }
 
 export function listProsMarcas(): Promise<ProsMarca[]> {
@@ -392,18 +397,22 @@ async function enviarLote(
 
 export interface ResultadoImport {
   eventos: number;
+  prioritarios: number;
   marcas: number;
   contatos: number;
 }
 
 export async function importarProspeccao(
-  p: { eventos: Record<string, unknown>[]; marcas: Record<string, unknown>[]; contatos: Record<string, unknown>[] },
+  p: { eventos: Record<string, unknown>[]; prioritarios: string[]; marcas: Record<string, unknown>[]; contatos: Record<string, unknown>[] },
   arquivo: string,
   autor: string | null,
   aoProgredir?: (etapa: string, feitas: number, total: number) => void,
 ): Promise<ResultadoImport> {
   const eventos = await enviarLote('pros_upsert_eventos', p.eventos, (n) =>
     aoProgredir?.('Eventos', n, p.eventos.length));
+  const { data: prioritarios, error: erroPrioritarios } = await supabase
+    .rpc('pros_marcar_prioritarios', { ids: p.prioritarios });
+  if (erroPrioritarios) throw erroPrioritarios;
   const marcas = await enviarLote('pros_upsert_marcas', p.marcas, (n) =>
     aoProgredir?.('Marcas', n, p.marcas.length));
   const contatos = await enviarLote('pros_upsert_contatos', p.contatos, (n) =>
@@ -413,7 +422,7 @@ export async function importarProspeccao(
     .from('pros_importacoes')
     .insert({ arquivo, eventos, marcas, contatos, autor });
   if (error) throw error; // o log falhou, mas os dados entraram — melhor a pessoa saber
-  return { eventos, marcas, contatos };
+  return { eventos, prioritarios: Number(prioritarios ?? p.prioritarios.length), marcas, contatos };
 }
 
 /**

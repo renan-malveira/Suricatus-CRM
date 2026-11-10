@@ -148,6 +148,7 @@ export interface Lead {
 
 export interface ProsEvento {
   id: string;
+  prioritario: boolean;
   nome: string;
   edicao: string | null;
   setor: string | null;
