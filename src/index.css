@@ -166,7 +166,22 @@ label { display: block; font-size: 11px; color: var(--dim); text-transform: uppe
 .lead-sem_interesse { background: rgba(255,255,255,.06); color: var(--dim); }
 .lead-novo { background: rgba(255,255,255,.06); color: var(--muted); }
 .lead-contatado, .lead-respondeu { background: rgba(245,166,35,.14); color: #f5c169; }
-.date-inline { width: 142px; min-width: 142px; padding: 6px 7px; font-size: 11.5px; }
+.date-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 142px; min-width: 142px; padding: 6px 8px; font-size: 11.5px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--card-2); color: var(--muted); cursor: pointer; text-align: left; font-variant-numeric: tabular-nums; }
+.date-inline:hover, .date-inline[aria-expanded="true"] { border-color: var(--cyan); color: #fff; }
+.date-inline:disabled { opacity: .55; cursor: not-allowed; }
+.date-calendar { position: fixed; z-index: 100; width: 264px; padding: 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel); box-shadow: 0 16px 44px rgba(0,0,0,.5); color: #fff; }
+.date-calendar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; text-transform: capitalize; }
+.date-calendar-head strong { font-size: 12.5px; }
+.date-nav { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
+.date-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.date-weekday, .date-empty, .date-day { display: grid; place-items: center; width: 30px; height: 30px; }
+.date-weekday { color: var(--dim); font-size: 10px; font-weight: 600; }
+.date-day { border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11.5px; }
+.date-day:hover { background: var(--card-2); color: #fff; }
+.date-day.selected { background: var(--cyan); color: #04222a; font-weight: 700; }
+.date-calendar-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--line); margin-top: 10px; padding-top: 9px; }
+.date-today, .date-clear { border: 0; background: transparent; color: var(--cyan); cursor: pointer; font-size: 11px; padding: 4px 2px; }
+.date-clear { color: var(--muted); }
 .kpis.kpis-5 { grid-template-columns: repeat(5, 1fr); }
 
 .filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }

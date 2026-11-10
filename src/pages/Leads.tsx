@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Lead, StatusLead, TipoCliente } from '../lib/types';
 import { createCliente, createLead, deleteLead, listClientes, listLeads, updateLead, agendarReuniaoLead } from '../lib/db';
 import { usePodeEscrever } from '../lib/RoleContext';
@@ -10,6 +10,8 @@ const STATUS: { id: StatusLead; label: string }[] = [
   { id: 'sem_interesse', label: 'Sem interesse' }, { id: 'convertido', label: 'Convertido em cliente' },
 ];
 const dataCurta = (s: string | null) => s ? new Date(`${s.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—';
+type CampoDataLead = 'primeiro_contato_em' | 'proximo_follow_up';
+type CalendarioAberto = { id: string; campo: CampoDataLead; mes: Date; ancora: HTMLButtonElement };
 
 export default function Leads() {
   const podeEscrever = usePodeEscrever();
@@ -20,6 +22,8 @@ export default function Leads() {
   const [filtro, setFiltro] = useState<StatusLead | 'todos'>('todos');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
+  const [calendario, setCalendario] = useState<CalendarioAberto | null>(null);
+  const calendarioRef = useRef<HTMLDivElement>(null);
 
   async function carregar() {
     setCarregando(true);
@@ -30,6 +34,26 @@ export default function Leads() {
     setCarregando(false);
   }
   useEffect(() => { carregar(); }, []);
+
+  useEffect(() => {
+    if (!calendario) return;
+    const fecharFora = (e: MouseEvent) => {
+      const alvo = e.target as Node;
+      if (!calendarioRef.current?.contains(alvo) && !calendario.ancora.contains(alvo)) setCalendario(null);
+    };
+    const fecharEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setCalendario(null); };
+    const fecharAoMover = () => setCalendario(null);
+    document.addEventListener('mousedown', fecharFora);
+    document.addEventListener('keydown', fecharEsc);
+    window.addEventListener('scroll', fecharAoMover, true);
+    window.addEventListener('resize', fecharAoMover);
+    return () => {
+      document.removeEventListener('mousedown', fecharFora);
+      document.removeEventListener('keydown', fecharEsc);
+      window.removeEventListener('scroll', fecharAoMover, true);
+      window.removeEventListener('resize', fecharAoMover);
+    };
+  }, [calendario]);
 
   const visiveis = useMemo(() => leads.filter(l =>
     (filtro === 'todos' || l.status === filtro) &&
@@ -59,13 +83,25 @@ export default function Leads() {
     } catch (e) { setErro((e as Error).message); }
   }
 
-  async function alterarData(l: Lead, campo: 'primeiro_contato_em' | 'proximo_follow_up', valor: string) {
+  async function alterarData(l: Lead, campo: CampoDataLead, valor: string) {
     const patch: Partial<Lead> = { [campo]: valor || null };
     try {
       await updateLead(l.id, patch);
       setLeads(current => current.map(item => item.id === l.id ? { ...item, ...patch } : item));
       setErro('');
+      return true;
     } catch (e) { setErro((e as Error).message); }
+    return false;
+  }
+
+  function abrirCalendario(e: React.MouseEvent<HTMLButtonElement>, l: Lead, campo: CampoDataLead) {
+    const valor = l[campo];
+    const base = valor ? new Date(`${valor.slice(0, 10)}T12:00:00`) : new Date();
+    setCalendario({ id: l.id, campo, mes: new Date(base.getFullYear(), base.getMonth(), 1), ancora: e.currentTarget });
+  }
+
+  async function escolherData(l: Lead, campo: CampoDataLead, valor: string) {
+    if (await alterarData(l, campo, valor)) setCalendario(null);
   }
 
   async function converter(l: Lead) {
@@ -114,8 +150,8 @@ export default function Leads() {
         {l.linkedin && <a className="lk" href={l.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a>}</td>
       <td>{l.segmento || '—'}{l.cidade ? <div className="mini">{l.cidade}{l.uf ? `, ${l.uf}` : ''}</div> : null}</td>
       <td>{l.canal || '—'}</td><td><span className={`pill lead-${l.status}`}>{STATUS.find(s => s.id === l.status)?.label ?? l.status}</span></td>
-      <td><input className="date-inline" type="date" aria-label={`Último contato — ${l.empresa}`} value={l.primeiro_contato_em?.slice(0,10) ?? ''} disabled={!podeEscrever} onChange={e => alterarData(l, 'primeiro_contato_em', e.target.value)} /></td>
-      <td><input className="date-inline" type="date" aria-label={`Follow-up — ${l.empresa}`} value={l.proximo_follow_up?.slice(0,10) ?? ''} disabled={!podeEscrever} onChange={e => alterarData(l, 'proximo_follow_up', e.target.value)} /></td>
+      <td><button type="button" className="date-inline" aria-label={`Último contato — ${l.empresa}`} aria-haspopup="dialog" aria-expanded={calendario?.id === l.id && calendario.campo === 'primeiro_contato_em'} disabled={!podeEscrever} onClick={e => abrirCalendario(e, l, 'primeiro_contato_em')}><span>{dataCurta(l.primeiro_contato_em)}</span><span aria-hidden="true">▾</span></button></td>
+      <td><button type="button" className="date-inline" aria-label={`Follow-up — ${l.empresa}`} aria-haspopup="dialog" aria-expanded={calendario?.id === l.id && calendario.campo === 'proximo_follow_up'} disabled={!podeEscrever} onClick={e => abrirCalendario(e, l, 'proximo_follow_up')}><span>{dataCurta(l.proximo_follow_up)}</span><span aria-hidden="true">▾</span></button></td>
       <td>{dataCurta(l.reuniao_em)}</td><td className="wrapcell">{l.motivo_contato || l.notas || '—'}</td>
       <td className="nowrap">{podeEscrever && <>
         {l.status === 'interessado' && !l.cliente_id && <button className="btn" onClick={() => converter(l)}>Criar cliente</button>}
@@ -125,6 +161,41 @@ export default function Leads() {
         <button className="icobtn" title="Remover lead" onClick={() => remover(l)}>🗑</button>
       </>}</td>
     </tr>)}</tbody></table></div>}
+    {calendario && (() => {
+      const lead = leads.find(item => item.id === calendario.id);
+      if (!lead) return null;
+      const primeiroDia = new Date(calendario.mes.getFullYear(), calendario.mes.getMonth(), 1);
+      const inicio = (primeiroDia.getDay() + 6) % 7;
+      const diasNoMes = new Date(calendario.mes.getFullYear(), calendario.mes.getMonth() + 1, 0).getDate();
+      const valorAtual = lead[calendario.campo]?.slice(0, 10);
+      const posicao = calendario.ancora.getBoundingClientRect();
+      const top = Math.max(8, Math.min(posicao.bottom + 6, window.innerHeight - 310));
+      const left = Math.max(8, Math.min(posicao.left, window.innerWidth - 280));
+      const escolherHoje = () => {
+        const hoje = new Date();
+        escolherData(lead, calendario.campo, `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`);
+      };
+      return <div ref={calendarioRef} className="date-calendar" role="dialog" aria-label="Selecionar data" style={{ top, left }}>
+        <div className="date-calendar-head">
+          <button type="button" className="date-nav" aria-label="Mês anterior" onClick={() => setCalendario(c => c ? { ...c, mes: new Date(c.mes.getFullYear(), c.mes.getMonth() - 1, 1) } : c)}>‹</button>
+          <strong>{calendario.mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>
+          <button type="button" className="date-nav" aria-label="Próximo mês" onClick={() => setCalendario(c => c ? { ...c, mes: new Date(c.mes.getFullYear(), c.mes.getMonth() + 1, 1) } : c)}>›</button>
+        </div>
+        <div className="date-calendar-grid">
+          {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span className="date-weekday" key={`${d}-${i}`}>{d}</span>)}
+          {Array.from({ length: inicio }, (_, i) => <span className="date-empty" key={`v-${i}`} />)}
+          {Array.from({ length: diasNoMes }, (_, i) => {
+            const dia = i + 1;
+            const value = `${calendario.mes.getFullYear()}-${String(calendario.mes.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+            return <button type="button" key={value} className={`date-day${valorAtual === value ? ' selected' : ''}`} aria-pressed={valorAtual === value} onClick={() => escolherData(lead, calendario.campo, value)}>{dia}</button>;
+          })}
+        </div>
+        <div className="date-calendar-foot">
+          <button type="button" className="date-today" onClick={escolherHoje}>Hoje</button>
+          {valorAtual && <button type="button" className="date-clear" onClick={() => escolherData(lead, calendario.campo, '')}>Limpar data</button>}
+        </div>
+      </div>;
+    })()}
     {editando !== undefined && <div className="overlay" onClick={() => setEditando(undefined)}>
       <form className="modal lead-modal" onSubmit={salvar} onClick={e => e.stopPropagation()}>
         <h3>{editando ? 'Editar lead' : 'Novo lead'}</h3><div className="formgrid">
